@@ -1095,7 +1095,12 @@ function netStatusPill(){
 }
 async function netInit(){
   if(!netConfigured()||!window.supabase)return false;
-  if(!NET.sb)NET.sb=window.supabase.createClient(CFG.url,CFG.key,{auth:{persistSession:true,autoRefreshToken:true}});
+  if(!NET.sb){
+    NET.sb=window.supabase.createClient(CFG.url,CFG.key,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});
+    NET.sb.auth.onAuthStateChange((event,session)=>{
+      if(event==="PASSWORD_RECOVERY"){NET.recovery=true;NET.user=session?session.user:NET.user;recoveryScreen();}
+    });
+  }
   try{
     const {data}=await NET.sb.auth.getSession();
     NET.user=data&&data.session?data.session.user:null;
@@ -1173,9 +1178,22 @@ function netAuthScreen(err,mode){
     (m==="up"?"<div class='field'><label>الاسم</label><input id='aName'></div>":"")+
     "<div class='field'><label>البريد الإلكتروني</label><input id='aEmail' type='email' autocomplete='email'></div>"+
     "<div class='field'><label>كلمة المرور</label><input id='aPass' type='password' autocomplete='"+(m==="up"?"new-password":"current-password")+"'></div>"+
-    (m==="up"?"<div class='field'><label>كود الدعوة (إن وُجد)</label><input id='aCode' placeholder='XXXX-XXXX' style='direction:ltr;text-align:left'></div>":"")+
+    (m==="up"?"<div class='field'><label>كود الدعوة</label><input id='aCode' placeholder='XXXX-XXXX' style='direction:ltr;text-align:left'>"+
+      "<div class='hint'>التسجيل بدعوة فقط. اتركه فارغاً إذا كنت مالك النظام وأول مستخدم فيه.</div></div>":"")+
     "<button class='btn p wide' id='aGo'>"+(m==="up"?"إنشاء الحساب":"دخول")+"</button>"+
+    (m==="in"?"<button class='btn gh wide' id='aForgot' style='margin-top:8px'>نسيت كلمة المرور؟</button>":"")+
     "<div class='foot'>بياناتك محفوظة على خادمك الخاص. كل جهة ترى بياناتها فقط.</div>");
+  const fg=$("#aForgot");
+  if(fg)fg.onclick=async()=>{
+    const email=($("#aEmail").value||"").trim().toLowerCase();
+    if(!email){netAuthScreen("اكتب بريدك أولاً ثم اضغط «نسيت كلمة المرور»","in");return;}
+    fg.textContent="جارٍ الإرسال…";
+    try{
+      const {error}=await NET.sb.auth.resetPasswordForEmail(email,{redirectTo:location.href.split("#")[0]});
+      if(error)throw error;
+      netAuthScreen("أرسلنا رابط استعادة كلمة المرور إلى "+email+" — افتحه من نفس الجهاز.","in");
+    }catch(e){netAuthScreen(errText(e),"in");}
+  };
   $("#auth").querySelectorAll(".tabs button").forEach(b=>b.onclick=()=>netAuthScreen("",b.dataset.m));
   const go=async()=>{
     const email=$("#aEmail").value.trim().toLowerCase(),pass=$("#aPass").value;
@@ -1183,8 +1201,13 @@ function netAuthScreen(err,mode){
     $("#aGo").textContent="لحظة…";
     try{
       if(m==="up"){
-        const name=$("#aName").value.trim(),code=$("#aCode").value.trim();
-        const {data,error}=await NET.sb.auth.signUp({email,password:pass,options:{data:{name}}});
+        const name=$("#aName").value.trim(),code=$("#aCode").value.trim().toUpperCase();
+        if(code){
+          let ok=false;
+          try{ok=await rpc("invite_valid",{p_code:code});}catch(e){}
+          if(!ok){netAuthScreen("كود الدعوة غير صحيح أو مستعمل مسبقاً — راجع مالك النظام","up");return;}
+        }
+        const {data,error}=await NET.sb.auth.signUp({email,password:pass,options:{data:{name,code}}});
         if(error)throw error;
         if(!data.session){netAuthScreen("أنشئ الحساب. افتح بريدك وفعّل الحساب ثم سجّل الدخول.","in");return;}
         NET.user=data.user;
@@ -1203,6 +1226,10 @@ function netAuthScreen(err,mode){
 }
 function errText(e){
   const m=(e&&e.message)||"";
+  if(/signup_requires_invite|Database error saving new user/i.test(m))return "التسجيل بدعوة فقط — أدخل كود دعوة صحيح من مالك النظام";
+  if(/invalid_invite_code/i.test(m))return "كود الدعوة غير صحيح أو مستعمل مسبقاً";
+  if(/Signups not allowed|signup_disabled/i.test(m))return "التسجيل مغلق حالياً — راجع مالك النظام";
+  if(/rate limit|too many/i.test(m))return "محاولات كثيرة — انتظر قليلاً ثم أعد المحاولة";
   if(/Invalid login/i.test(m))return "البريد أو كلمة المرور غير صحيحة";
   if(/already registered/i.test(m))return "هذا البريد مسجّل مسبقاً — سجّل الدخول";
   if(/Email not confirmed/i.test(m))return "فعّل الحساب من رسالة البريد أولاً";
@@ -1245,7 +1272,34 @@ async function netEnter(tid){
   applyBrand();save();
   state.page="dash";$("#auth").hidden=true;$("#app").hidden=false;render();
 }
+/* ---- استعادة كلمة المرور ---- */
+function recoveryScreen(err){
+  showAuth("<div class='mark'>دأ</div><h1>تعيين كلمة مرور جديدة</h1><div class='lead'>اختر كلمة مرور جديدة لحسابك.</div>"+
+    (err?"<div class='err'>"+esc(err)+"</div>":"")+
+    "<div class='field'><label>كلمة المرور الجديدة</label><input id='rp1' type='password' autocomplete='new-password'></div>"+
+    "<div class='field'><label>تأكيد كلمة المرور</label><input id='rp2' type='password' autocomplete='new-password'></div>"+
+    "<button class='btn p wide' id='rGo'>حفظ كلمة المرور</button>");
+  const go=async()=>{
+    const a=$("#rp1").value,b=$("#rp2").value;
+    if(!a||a.length<6){recoveryScreen("كلمة المرور ٦ أحرف فأكثر");return;}
+    if(a!==b){recoveryScreen("الكلمتان غير متطابقتين");return;}
+    $("#rGo").textContent="لحظة…";
+    try{
+      const {error}=await NET.sb.auth.updateUser({password:a});
+      if(error)throw error;
+      history.replaceState(null,"",location.pathname+location.search);
+      toast("تم تحديث كلمة المرور");
+      const {data}=await NET.sb.auth.getSession();
+      NET.user=data&&data.session?data.session.user:null;
+      if(NET.user)NET.owner=!!(await rpc("is_owner"));
+      netBoot();
+    }catch(e){recoveryScreen(errText(e));}
+  };
+  $("#rGo").onclick=go;
+  $("#auth").querySelectorAll("input").forEach(i=>i.onkeydown=e=>{if(e.key==="Enter")go();});
+}
 async function netBoot(){
+  if(/type=recovery/.test(location.hash||"")||NET.recovery){NET.recovery=true;recoveryScreen();return;}
   if(!NET.user){netAuthScreen();return;}
   try{await netTenants();}catch(e){}
   const s=ROOT.session;
