@@ -3,6 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="strict-origin-when-cross-origin">
+<meta name="color-scheme" content="light dark">
 <title>GRDlabs system</title>
 <link rel="icon" id="favicon" href="data:,">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -126,7 +128,13 @@ radial-gradient(120% 90% at 80% 0%, color-mix(in srgb, var(--brand) 10%, transpa
 .stat .k{font-size:12.5px;color:var(--muted)}
 .stat .v{font-family:var(--f-disp);font-size:22px;font-weight:600;font-variant-numeric:tabular-nums;letter-spacing:-.02em}
 .stat .v small{font-size:12px;font-weight:400;color:var(--muted);margin-inline-start:3px}
-.stat.acc .v{color:var(--accent)} .stat.dg .v{color:var(--danger)} .stat.gd .v{color:var(--gold)} .stat.ok .v{color:var(--ok)}
+.stat.acc .v{color:var(--accent)} .stat.dg .v{color:var(--danger)} .stat.gd .v{color:var(--gold)} .stat.ok .v{color:var(--ok)} .stat.wr .v{color:var(--warn)}
+.strip.sub{margin-top:10px}
+.strip.sub .stat{padding:11px 16px}
+.stat.sm .v{font-size:17px}
+.stat{position:relative}
+.stat::after{content:"";position:absolute;inset-block-start:0;inset-inline-start:0;width:100%;height:2px;background:transparent}
+.stat.ok::after{background:var(--ok)} .stat.dg::after{background:var(--danger)} .stat.gd::after{background:var(--gold)} .stat.wr::after{background:var(--warn)} .stat.acc::after{background:var(--accent)}
 /* ---------- tables ---------- */
 .tw{overflow-x:auto}
 table{width:100%;border-collapse:collapse;font-size:14px}
@@ -134,9 +142,29 @@ th{text-align:start;font-size:11.5px;letter-spacing:.05em;color:var(--muted);fon
 td{padding:11px 14px;border-bottom:1px solid var(--line);vertical-align:middle}
 tbody tr:last-child td{border-bottom:0}
 tbody tr:hover{background:var(--surf2)}
+tbody tr.sum{background:var(--surf2)}
+tbody tr.sum td{border-top:2px solid var(--line);font-variant-numeric:tabular-nums}
+tbody tr.sum:hover{background:var(--surf2)}
+th{position:sticky;top:0;z-index:2}
+.tw{overflow-x:auto;max-height:none}
+select.mini,input.mini{background:var(--surf);border:1px solid var(--line);border-radius:9px;padding:7px 10px;font-size:13px;min-width:130px}
+.catbars{display:flex;flex-direction:column;gap:10px}
+.catrow{display:grid;grid-template-columns:minmax(120px,1fr) 3fr minmax(110px,auto);gap:12px;align-items:center;font-size:13.5px}
+.catrow .cl{color:var(--ink2)}
+.catrow .bar{min-width:60px;height:8px}
+.catrow .cv{text-align:end;color:var(--ink);font-weight:500}
+body.blurmoney td.n,body.blurmoney .stat .v{filter:blur(5px);transition:filter .12s}
+body.blurmoney td.n:hover,body.blurmoney .stat:hover .v{filter:none}
+#lockov{position:fixed;inset:0;z-index:90;display:grid;place-items:center;padding:20px;
+background:radial-gradient(120% 90% at 80% 0%, color-mix(in srgb, var(--brand) 12%, transparent), transparent 60%), var(--bg)}
+#lockov .lockcard{width:min(420px,100%);background:var(--surf);border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow);padding:30px;text-align:center}
+#lockov h1{font-size:20px;margin-bottom:6px}
+#lockov .lead{color:var(--muted);font-size:13.5px;margin-bottom:20px}
+#lockov .field{text-align:start;margin-bottom:12px}
+#lockov .err{background:var(--danger-soft);color:var(--danger);padding:9px 12px;border-radius:9px;font-size:13.5px;margin-bottom:12px}
 td.n{font-variant-numeric:tabular-nums;white-space:nowrap}
 td .t2{color:var(--muted);font-size:12.5px}
-.rowact{display:flex;gap:4px;justify-content:flex-end}
+.rowact{display:flex;gap:4px;justify-content:flex-end;flex-wrap:wrap}
 .rowact .btn{white-space:nowrap}
 .who b{white-space:nowrap}
 .empty{padding:40px 18px;text-align:center;color:var(--muted)}
@@ -210,8 +238,6 @@ body{background:#fff}
 }
 @media (prefers-reduced-motion:reduce){*{transition:none !important;animation:none !important}}
 </style>
-</head>
-<body>
 <div id="auth" class="auth" hidden></div>
 <div class="app" id="app" hidden>
 <aside class="side">
@@ -270,8 +296,8 @@ const genCode=()=>{const A="ABCDEFGHJKLMNPQRSTUVWXYZ23456789";let s="";for(let i
 /* ================= root store ================= */
 let ROOT={v:2,owner:null,tenants:[],data:{},session:null};
 let DB=null, ME=null, TENANT=null;
-const blankData=()=>({clients:[],projects:[],logs:[],invoices:[],payments:[],team:[],pieces:[],payroll:[],
-settings:{company:"",owner:"",phone:"",address:"",currency:"د.ع",rate:0,demo:false}});
+const blankData=()=>({clients:[],projects:[],logs:[],invoices:[],payments:[],team:[],pieces:[],payroll:[],expenses:[],
+settings:{company:"",owner:"",phone:"",address:"",currency:"د.ع",rate:0,demo:false,lockMin:30}});
 function save(){
 try{localStorage.setItem(KEY,JSON.stringify(ROOT));}catch(e){toast("تعذر الحفظ محلياً — الذاكرة ممتلئة. صغّر الشعار أو خذ نسخة احتياطية.");}
 try{if(typeof queueSync==="function")queueSync();}catch(e){}
@@ -342,11 +368,38 @@ const late=inv.due&&inv.due<today();
 if(paid>0)return{k:late?"متأخرة — جزئياً":"مسددة جزئياً",cls:late?"p-dg":"p-warn",paid,rem:amt-paid};
 return{k:late?"متأخرة":"غير مسددة",cls:late?"p-dg":"p-mut",paid,rem:amt-paid};
 }
+/* --- المصروفات --- */
+const EXP_CATS=["مواد وشراء","أجور نقل","وقود","إيجار","اتصالات وإنترنت","صيانة","أدوات ومعدات","رسوم حكومية","ضيافة","دعاية وتسويق","مصاريف بنكية","أخرى"];
+const PAYMETHODS=["نقداً","تحويل مصرفي","صك","محفظة إلكترونية","أخرى"];
+const expList=()=>DB.expenses||(DB.expenses=[]);
+const expOfProject=pid=>expList().filter(x=>x.projectId===pid).reduce((s,x)=>s+Number(x.amount||0),0);
+const expTotal=fn=>expList().filter(fn||(()=>true)).reduce((s,x)=>s+Number(x.amount||0),0);
+const inMonth=(d,m)=>String(d||"").slice(0,7)===m;
+/* --- واصل / باقي على المشاريع --- */
+function projectMoney(p){
+const amt=Number(p.amount||0);
+const viaInv=DB.invoices.filter(i=>i.projectId===p.id).reduce((s,i)=>s+paidOf(i.id),0);
+const direct=DB.payments.filter(x=>!x.invoiceId&&x.projectId===p.id).reduce((s,x)=>s+Number(x.amount||0),0);
+const got=viaInv+direct;
+return{amount:amt,got,rem:Math.max(0,amt-got),over:got-amt};
+}
+const paymentClient=p=>{
+if(p.invoiceId){const i=byId(DB.invoices,p.invoiceId);if(i)return i.clientId;}
+if(p.projectId){const pr=byId(DB.projects,p.projectId);if(pr)return pr.clientId;}
+return p.clientId||"";
+};
+const paymentProject=p=>{
+if(p.invoiceId){const i=byId(DB.invoices,p.invoiceId);if(i)return i.projectId;}
+return p.projectId||"";
+};
 const totals=()=>{
 const inv=DB.invoices.reduce((s,i)=>s+Number(i.amount||0),0);
 const paid=DB.payments.reduce((s,p)=>s+Number(p.amount||0),0);
+const invPaid=DB.invoices.reduce((s,i)=>s+paidOf(i.id),0);
 const late=DB.invoices.filter(i=>invStatus(i).rem>0&&i.due&&i.due<today()).reduce((s,i)=>s+invStatus(i).rem,0);
-return{inv,paid,due:inv-paid,late};
+const exp=expTotal();
+const wages=DB.payroll.filter(x=>["دفعة","سلفة"].includes(x.type)).reduce((s,x)=>s+Number(x.amount||0),0);
+return{inv,paid,invPaid,due:inv-invPaid,late,exp,wages,out:exp+wages,net:paid-exp-wages};
 };
 function nextNo(prefix,list){
 const y=new Date().getFullYear();
@@ -376,6 +429,10 @@ const sal=DB.payroll.filter(x=>x.projectId===pid&&["راتب مستحق","مكا
 return pieces+hours+sal;
 }
 const teamDueTotal=()=>DB.team.filter(m=>m.active!==false).reduce((s,m)=>s+memberCalc(m).due,0);
+function projectProfit(p){
+const cost=teamCostOfProject(p.id),ex=expOfProject(p.id);
+return{cost,ex,total:cost+ex,profit:Number(p.amount||0)-cost-ex};
+}
 /* ================= ui helpers ================= */
 let toastT;
 function toast(msg){const t=$("#toast");t.textContent=msg;t.classList.add("on");clearTimeout(toastT);toastT=setTimeout(()=>t.classList.remove("on"),3000);}
@@ -406,7 +463,13 @@ const frm=$("#frm"),out={};
 for(const f of fields){
 const el=frm.elements[f.name];let v=el?String(el.value).trim():"";
 if(f.req&&!v){toast("الحقل «"+f.label+"» مطلوب");if(el)el.focus();return;}
-out[f.name]=f.type==="number"?(v===""?0:Number(v)):v;
+if(f.type==="number"){
+const n=v===""?0:Number(v);
+if(v!==""&&!isFinite(n)){toast("«"+f.label+"» يجب أن يكون رقماً");if(el)el.focus();return;}
+if(f.pos&&!(n>0)){toast("«"+f.label+"» يجب أن يكون أكبر من صفر");if(el)el.focus();return;}
+if(f.max!=null&&n>f.max){toast("«"+f.label+"» أكبر من الحد المسموح");if(el)el.focus();return;}
+out[f.name]=n;
+}else out[f.name]=v;
 }
 closeModal();onSave(out);
 };
@@ -441,13 +504,23 @@ showDoc(h,"فاتورة "+inv.no);
 }
 function receiptDoc(p){
 const inv=byId(DB.invoices,p.invoiceId)||{};
+const pid=paymentProject(p),proj=byId(DB.projects,pid)||{};
 let h=docHead("وصل استلام","رقم الوصل: <b>"+esc(p.no||"—")+"</b><br>التاريخ: "+fdate(p.date));
-h+="<p style='font-size:15px;line-height:2.2'>استلمنا من السيد/السادة <b>"+esc(clientName(inv.clientId))+"</b> مبلغاً وقدره <b>"+money(p.amount)+
-"</b>، وذلك عن الفاتورة رقم <b>"+esc(inv.no||"—")+"</b> الخاصة بمشروع <b>"+esc(projectTitle(inv.projectId))+"</b>، بواسطة <b>"+esc(p.method||"—")+"</b>."+
+h+="<p style='font-size:15px;line-height:2.2'>استلمنا من السيد/السادة <b>"+esc(clientName(paymentClient(p)))+"</b> مبلغاً وقدره <b>"+money(p.amount)+
+"</b>، وذلك "+(inv.id?"عن الفاتورة رقم <b>"+esc(inv.no||"—")+"</b> الخاصة ":"تسديداً ")+
+"بمشروع <b>"+esc(proj.title||"—")+"</b>، بواسطة <b>"+esc(p.method||"—")+"</b>."+
 (p.notes?"<br>ملاحظات: "+esc(p.notes):"")+"</p>";
-const st=inv.id?invStatus(inv):{rem:0};
+if(inv.id){
+const st=invStatus(inv);
 h+="<div class='tot'><table><tr><td>إجمالي الفاتورة</td><td class='n' style='text-align:end'>"+money(inv.amount||0)+"</td></tr>"+
-"<tr><td class='big'>المتبقي بعد هذه الدفعة</td><td class='n big' style='text-align:end'>"+money(st.rem)+"</td></tr></table></div>";
+"<tr><td>الواصل من الفاتورة</td><td class='n' style='text-align:end'>"+money(st.paid)+"</td></tr>"+
+"<tr><td class='big'>الباقي على الفاتورة</td><td class='n big' style='text-align:end'>"+money(st.rem)+"</td></tr></table></div>";
+}else if(proj.id){
+const mn=projectMoney(proj);
+h+="<div class='tot'><table><tr><td>مبلغ المشروع</td><td class='n' style='text-align:end'>"+money(mn.amount)+"</td></tr>"+
+"<tr><td>الواصل</td><td class='n' style='text-align:end'>"+money(mn.got)+"</td></tr>"+
+"<tr><td class='big'>الباقي</td><td class='n big' style='text-align:end'>"+money(mn.rem)+"</td></tr></table></div>";
+}
 h+="<div class='sign'><div>توقيع الدافع</div><div>توقيع المستلم</div></div>";
 showDoc(h,"وصل "+(p.no||""));
 }
@@ -459,9 +532,9 @@ h+="<p style='font-size:15px;line-height:2.2'>استلم السيد <b>"+esc(m.n
 (tx.projectId?" ضمن مشروع <b>"+esc(projectTitle(tx.projectId))+"</b>":"")+" بواسطة <b>"+esc(tx.method||"نقداً")+"</b>."+
 (tx.note?"<br>ملاحظات: "+esc(tx.note):"")+"</p>";
 h+="<div class='tot'><table><tr><td>إجمالي المستحق</td><td class='n' style='text-align:end'>"+money(c.earned)+"</td></tr>"+
-"<tr><td>المدفوع والسلف</td><td class='n' style='text-align:end'>"+money(c.paidOut)+"</td></tr>"+
+"<tr><td>الواصل (دفعات وسلف)</td><td class='n' style='text-align:end'>"+money(c.paidOut)+"</td></tr>"+
 "<tr><td>الخصومات</td><td class='n' style='text-align:end'>"+money(c.ded)+"</td></tr>"+
-"<tr><td class='big'>الرصيد المتبقي له</td><td class='n big' style='text-align:end'>"+money(c.due)+"</td></tr></table></div>";
+"<tr><td class='big'>الباقي له</td><td class='n big' style='text-align:end'>"+money(c.due)+"</td></tr></table></div>";
 h+="<div class='sign'><div>توقيع المستلم</div><div>توقيع المحاسب</div></div>";
 showDoc(h,"وصل "+(tx.no||""));
 }
@@ -482,11 +555,45 @@ if(!rows.length)h+="<tr><td colspan='5' style='text-align:center;color:#6b7a76'>
 rows.forEach(r=>{bal+=r.cr-r.dr;h+="<tr><td>"+fdate(r.d)+"</td><td>"+esc(r.t)+"</td><td class='n' style='text-align:end'>"+(r.cr?num(r.cr):"—")+
 "</td><td class='n' style='text-align:end'>"+(r.dr?num(r.dr):"—")+"</td><td class='n' style='text-align:end'>"+num(bal)+"</td></tr>";});
 h+="</tbody></table><div class='tot'><table><tr><td>إجمالي المستحق</td><td class='n' style='text-align:end'>"+money(c.earned)+"</td></tr>"+
-"<tr><td>المستلم (دفعات وسلف)</td><td class='n' style='text-align:end'>"+money(c.paidOut)+"</td></tr>"+
+"<tr><td>الواصل (دفعات وسلف)</td><td class='n' style='text-align:end'>"+money(c.paidOut)+"</td></tr>"+
 "<tr><td>الخصومات</td><td class='n' style='text-align:end'>"+money(c.ded)+"</td></tr>"+
-"<tr><td class='big'>الرصيد المتبقي له</td><td class='n big' style='text-align:end'>"+money(c.due)+"</td></tr></table></div>";
+"<tr><td class='big'>الباقي له</td><td class='n big' style='text-align:end'>"+money(c.due)+"</td></tr></table></div>";
 h+="<div class='sign'><div>توقيع العضو</div><div>توقيع المحاسب</div></div>";
 showDoc(h,"كشف حساب — "+m.name);
+}
+function expenseDoc(x){
+let h=docHead("سند صرف","رقم السند: <b>"+esc(x.no||"—")+"</b><br>التاريخ: "+fdate(x.date));
+h+="<div class='d-meta' style='margin-bottom:14px'><b>الجهة المستفيدة:</b> "+esc(x.vendor||"—")+
+(x.projectId?"<br><b>المشروع:</b> "+esc(projectTitle(x.projectId)):"")+"</div>";
+h+="<table><thead><tr><th>التصنيف</th><th>البيان</th><th>طريقة الدفع</th><th style='text-align:end'>المبلغ</th></tr></thead><tbody>"+
+"<tr><td>"+esc(x.cat||"—")+"</td><td>"+esc(x.notes||"—")+"</td><td>"+esc(x.method||"نقداً")+"</td>"+
+"<td class='n' style='text-align:end'>"+money(x.amount)+"</td></tr></tbody></table>";
+h+="<div class='tot'><table><tr><td class='big'>المبلغ المصروف</td><td class='n big' style='text-align:end'>"+money(x.amount)+"</td></tr></table></div>";
+h+="<div class='sign'><div>توقيع المستلم</div><div>توقيع المحاسب</div></div>";
+showDoc(h,"سند صرف "+(x.no||""));
+}
+function projectStatementDoc(pid){
+const p=byId(DB.projects,pid);if(!p)return;
+const mn=projectMoney(p),pf=projectProfit(p);
+const invs=DB.invoices.filter(i=>i.projectId===pid);
+const pays=DB.payments.filter(x=>paymentProject(x)===pid).sort((a,b)=>a.date<b.date?-1:1);
+const exps=expList().filter(x=>x.projectId===pid).sort((a,b)=>a.date<b.date?-1:1);
+let h=docHead("كشف مالي للمشروع","المشروع: <b>"+esc(p.title)+"</b><br>العميل: "+esc(clientName(p.clientId))+"<br>المدة: "+fdate(p.start)+" — "+fdate(p.end));
+h+="<div class='tot' style='margin-top:0'><table><tr><td>المبلغ المتفق عليه</td><td class='n' style='text-align:end'>"+money(mn.amount)+"</td></tr>"+
+"<tr><td>الواصل</td><td class='n' style='text-align:end'>"+money(mn.got)+"</td></tr>"+
+"<tr><td class='big'>الباقي على العميل</td><td class='n big' style='text-align:end'>"+money(mn.rem)+"</td></tr></table></div>";
+h+="<div style='margin-top:16px'><b style='font-size:13px'>الواصل (الدفعات المستلمة)</b><table style='margin-top:6px'><thead><tr><th>التاريخ</th><th>الوصل</th><th>الفاتورة</th><th>الطريقة</th><th style='text-align:end'>المبلغ</th></tr></thead><tbody>"+
+(pays.length?pays.map(x=>"<tr><td>"+fdate(x.date)+"</td><td>"+esc(x.no||"—")+"</td><td>"+esc(x.invoiceId?((byId(DB.invoices,x.invoiceId)||{}).no||"—"):"مباشرة")+"</td><td>"+esc(x.method||"—")+"</td><td class='n' style='text-align:end'>"+money(x.amount)+"</td></tr>").join("")
+:"<tr><td colspan='5' style='text-align:center;color:#6b7a76'>لا توجد دفعات</td></tr>")+"</tbody></table></div>";
+h+="<div style='margin-top:16px'><b style='font-size:13px'>المصروفات على المشروع</b><table style='margin-top:6px'><thead><tr><th>التاريخ</th><th>التصنيف</th><th>البيان</th><th style='text-align:end'>المبلغ</th></tr></thead><tbody>"+
+(exps.length?exps.map(x=>"<tr><td>"+fdate(x.date)+"</td><td>"+esc(x.cat||"—")+"</td><td>"+esc(x.notes||x.vendor||"—")+"</td><td class='n' style='text-align:end'>"+money(x.amount)+"</td></tr>").join("")
+:"<tr><td colspan='4' style='text-align:center;color:#6b7a76'>لا توجد مصروفات</td></tr>")+"</tbody></table></div>";
+h+="<div class='tot'><table><tr><td>إيراد المشروع</td><td class='n' style='text-align:end'>"+money(mn.amount)+"</td></tr>"+
+"<tr><td>كلفة الفريق</td><td class='n' style='text-align:end'>"+money(pf.cost)+"</td></tr>"+
+"<tr><td>المصروفات</td><td class='n' style='text-align:end'>"+money(pf.ex)+"</td></tr>"+
+"<tr><td class='big'>صافي الربح</td><td class='n big' style='text-align:end'>"+money(pf.profit)+"</td></tr></table></div>";
+h+="<div class='note'>صادر آلياً بتاريخ "+fdate(today())+".</div>";
+showDoc(h,"كشف مالي — "+p.title);
 }
 function statementDoc(clientId,from,to){
 const c=byId(DB.clients,clientId);if(!c)return;
@@ -533,7 +640,8 @@ h+="<div class='sign'><div>توقيع العميل</div><div>توقيع المن
 showDoc(h,"كشف أعمال — "+p.title);
 }
 /* ================= files ================= */
-function csv(rows){return "﻿"+rows.map(r=>r.map(c=>'"'+String(c==null?"":c).replace(/"/g,'""')+'"').join(",")).join("\r\n");}
+function csvCell(c){let s=String(c==null?"":c);if(/^[=+\-@\t\r]/.test(s))s="'"+s;return '"'+s.replace(/"/g,'""')+'"';}
+function csv(rows){return "﻿"+rows.map(r=>r.map(csvCell).join(",")).join("\r\n");}
 let DL=null,dlTried=false;
 async function saveVia(name,text,type){
 if(!dlTried){dlTried=true;try{if(window.claude&&typeof claude.use==="function")DL=await claude.use("downloads");}catch(e){DL=null;}}
@@ -683,7 +791,9 @@ logs:{t:"سجل الأوقات",s:"ساعات العمل على كل مشروع"
 team:{t:"الفريق",s:"الأعضاء وأنظمة أجورهم ومستحقاتهم"},
 payroll:{t:"الرواتب والمستحقات",s:"احتساب الرواتب والقطعة والسلف والدفعات"},
 invoices:{t:"الفواتير",s:"الفواتير والمستحقات وتواريخ التسديد"},
-payments:{t:"الدفعات والوصولات",s:"المبالغ المستلمة ووصولات الاستلام"},
+payments:{t:"الدفعات والوصولات",s:"المبالغ الواصلة ووصولات الاستلام"},
+expenses:{t:"المصروفات",s:"الصرفيات وسندات الصرف وتصنيفاتها"},
+cash:{t:"الصندوق",s:"الوارد والصادر وصافي الحركة"},
 reports:{t:"التقارير والكشوفات",s:"كشوفات الحساب والأعمال والأرباح"},
 settings:{t:"إعدادات الحساب",s:"الهوية والبيانات والنسخ الاحتياطي"},
 accounts:{t:"حسابات النظام",s:"الجهات المشتركة وأكواد الدخول"},
@@ -694,13 +804,13 @@ ownerset:{t:"إعدادات المالك",s:"حسابك وبيانات الفو�
 const NAV_TENANT=[["الرئيسية",[["dash","لوحة التحكم"]]],
 ["السجلات",[["clients","العملاء"],["projects","المشاريع"],["logs","سجل الأوقات"]]],
 ["الفريق",[["team","الفريق"],["payroll","الرواتب والمستحقات"]]],
-["المالية",[["invoices","الفواتير"],["payments","الدفعات والوصولات"],["reports","التقارير والكشوفات"]]],
+["المالية",[["invoices","الفواتير"],["payments","الدفعات والوصولات"],["expenses","المصروفات"],["cash","الصندوق"],["reports","التقارير والكشوفات"]]],
 ["أخرى",[["settings","إعدادات الحساب"],["mysub","اشتراكي"]]]];
 const NAV_OWNER=[["مالك النظام",[["accounts","حسابات النظام"],["subs","الاشتراكات والفوترة"],["ownerset","إعدادات المالك"]]]];
 function counts(id){
 if(!DB)return"";
 const m={clients:DB.clients.length,projects:DB.projects.length,logs:DB.logs.length,team:DB.team.length,
-invoices:DB.invoices.length,payments:DB.payments.length,accounts:ROOT.tenants.length};
+invoices:DB.invoices.length,payments:DB.payments.length,expenses:expList().length,accounts:ROOT.tenants.length};
 return m[id]!=null?m[id]:"";
 }
 function buildNav(){
@@ -751,17 +861,20 @@ logs:"<button class='btn p' data-act='log-new'>+ تسجيل وقت</button>",
 team:"<button class='btn p' data-act='member-new'>+ عضو فريق</button>",
 payroll:"<button class='btn' data-act='piece-new'>+ عمل بالقطعة</button><button class='btn p' data-act='ptx-new'>+ حركة (دفعة/سلفة/خصم)</button>",
 invoices:"<button class='btn p' data-act='invoice-new'>+ فاتورة</button>",
-payments:"<button class='btn p' data-act='payment-new'>+ دفعة</button>",
-dash:"<button class='btn' data-act='invoice-new'>+ فاتورة</button><button class='btn p' data-act='payment-new'>+ دفعة</button>",
+payments:"<button class='btn' data-act='project-pay'>+ تسديد على مشروع</button><button class='btn p' data-act='payment-new'>+ دفعة على فاتورة</button>",
+expenses:"<button class='btn p' data-act='expense-new'>+ مصروف</button>",
+cash:"<button class='btn' data-act='expense-new'>+ مصروف</button><button class='btn p' data-act='payment-new'>+ دفعة</button>",
+dash:"<button class='btn' data-act='expense-new'>+ مصروف</button><button class='btn' data-act='invoice-new'>+ فاتورة</button><button class='btn p' data-act='payment-new'>+ دفعة</button>",
 accounts:"<button class='btn p' data-act='tenant-new'>+ حساب جديد</button>"
 };
 $("#pageActions").innerHTML=canEdit()?(A[state.page]||""):"";
 const V={dash:vDash,clients:vClients,projects:vProjects,logs:vLogs,team:vTeam,payroll:vPayroll,invoices:vInvoices,
-payments:vPayments,reports:vReports,settings:vSettings,accounts:vAccounts,ownerset:vOwnerSet,subs:vSubs,mysub:vMySub};
+payments:vPayments,expenses:vExpenses,cash:vCash,reports:vReports,settings:vSettings,accounts:vAccounts,ownerset:vOwnerSet,subs:vSubs,mysub:vMySub};
 $("#view").innerHTML=V[state.page]();
 if(state.page==="dash")bindChart();
 if(state.page==="settings")bindSettings();
 if(state.page==="ownerset")bindOwnerSet();
+try{applyBlur();resetIdle();}catch(e){}
 window.scrollTo({top:0});
 }
 const searchBar=ph=>"<div class='search'><input id='q' type='search' placeholder='"+ph+"' value='"+esc(state.q)+"'></div>";
@@ -777,14 +890,20 @@ const act=(a,id,label,cls)=>"<button class='btn sm "+(cls||"")+"' data-act='"+a+
 function vDash(){
 const t=totals(),active=DB.projects.filter(p=>p.status==="قيد التنفيذ");
 const upcoming=DB.invoices.map(i=>({i,s:invStatus(i)})).filter(x=>x.s.rem>0).sort((a,b)=>(a.i.due||"9")<(b.i.due||"9")?-1:1).slice(0,6);
-const tdue=teamDueTotal();
+const tdue=teamDueTotal(),cu=DB.settings.currency;
+const mo=thisMonth(),mExp=expTotal(x=>inMonth(x.date,mo)),mIn=DB.payments.filter(x=>inMonth(x.date,mo)).reduce((s,x)=>s+Number(x.amount||0),0);
 let h="<div class='strip'>"+
-"<div class='stat'><span class='k'>إجمالي الفواتير</span><span class='v'>"+num(t.inv)+"<small>"+DB.settings.currency+"</small></span></div>"+
-"<div class='stat ok'><span class='k'>المُحصَّل</span><span class='v'>"+num(t.paid)+"<small>"+DB.settings.currency+"</small></span></div>"+
-"<div class='stat gd'><span class='k'>المتبقي على العملاء</span><span class='v'>"+num(t.due)+"<small>"+DB.settings.currency+"</small></span></div>"+
-"<div class='stat dg'><span class='k'>متأخر عن الاستحقاق</span><span class='v'>"+num(t.late)+"<small>"+DB.settings.currency+"</small></span></div>"+
-"<div class='stat dg'><span class='k'>مستحقات الفريق</span><span class='v'>"+num(tdue)+"<small>"+DB.settings.currency+"</small></span></div>"+
-"<div class='stat'><span class='k'>مشاريع قيد التنفيذ</span><span class='v'>"+active.length+"</span></div></div>";
+"<div class='stat ok'><span class='k'>الواصل (كل المقبوضات)</span><span class='v'>"+num(t.paid)+"<small>"+cu+"</small></span></div>"+
+"<div class='stat gd'><span class='k'>الباقي على العملاء</span><span class='v'>"+num(t.due)+"<small>"+cu+"</small></span></div>"+
+"<div class='stat dg'><span class='k'>متأخر عن الاستحقاق</span><span class='v'>"+num(t.late)+"<small>"+cu+"</small></span></div>"+
+"<div class='stat wr'><span class='k'>المصروفات</span><span class='v'>"+num(t.exp)+"<small>"+cu+"</small></span></div>"+
+"<div class='stat dg'><span class='k'>باقي مستحقات الفريق</span><span class='v'>"+num(tdue)+"<small>"+cu+"</small></span></div>"+
+"<div class='stat "+(t.net<0?"dg":"ok")+"'><span class='k'>صافي الصندوق</span><span class='v'>"+num(t.net)+"<small>"+cu+"</small></span></div></div>";
+h+="<div class='strip sub'>"+
+"<div class='stat sm'><span class='k'>وارد هذا الشهر</span><span class='v'>"+num(mIn)+"<small>"+cu+"</small></span></div>"+
+"<div class='stat sm'><span class='k'>صادر هذا الشهر</span><span class='v'>"+num(mExp)+"<small>"+cu+"</small></span></div>"+
+"<div class='stat sm'><span class='k'>إجمالي الفواتير</span><span class='v'>"+num(t.inv)+"<small>"+cu+"</small></span></div>"+
+"<div class='stat sm'><span class='k'>مشاريع قيد التنفيذ</span><span class='v'>"+active.length+"</span></div></div>";
 h+="<div class='panel'><div class='panel-h'><h2>المقبوضات الشهرية</h2><span class='grow'></span><span class='pill p-acc'>آخر ١٢ شهراً</span></div><div class='panel-b'>"+monthlyChart()+"</div></div>";
 h+="<div class='panel'><div class='panel-h'><h2>مستحقات قادمة ومتأخرة</h2><span class='grow'></span><button class='btn sm' data-go='invoices'>كل الفواتير</button></div>";
 h+=upcoming.length?"<div class='tw'><table><thead><tr><th>الفاتورة</th><th>العميل</th><th>الاستحقاق</th><th>المتبقي</th><th>الحالة</th><th></th></tr></thead><tbody>"+
@@ -794,11 +913,12 @@ upcoming.map(({i,s})=>"<tr><td>"+esc(i.no)+"<div class='t2'>"+esc(projectTitle(i
 :"<div class='empty'><b>لا توجد مستحقات</b>كل الفواتير مسددة.</div>";
 h+="</div>";
 h+="<div class='panel'><div class='panel-h'><h2>المشاريع الجارية</h2><span class='grow'></span><button class='btn sm' data-go='projects'>كل المشاريع</button></div>";
-h+=active.length?"<div class='tw'><table><thead><tr><th>المشروع</th><th>العميل</th><th>المدة</th><th>التقدم</th><th>المبلغ</th><th>كلفة الفريق</th></tr></thead><tbody>"+
-active.map(p=>{const pr=progress(p),c=teamCostOfProject(p.id);
+h+=active.length?"<div class='tw'><table><thead><tr><th>المشروع</th><th>العميل</th><th>المدة</th><th>التقدم</th><th>المبلغ</th><th>الواصل</th><th>الباقي</th></tr></thead><tbody>"+
+active.map(p=>{const pr=progress(p),mn=projectMoney(p);
 return "<tr><td>"+esc(p.title)+"</td><td>"+esc(clientName(p.clientId))+"</td><td class='n'>"+fdate(p.start)+" ← "+fdate(p.end)+"</td>"+
 "<td><div class='row' style='gap:8px'><span class='bar'><i style='width:"+pr+"%'></i></span><span class='t2 num'>"+pr+"%</span></div></td>"+
-"<td class='n'>"+money(p.amount)+"</td><td class='n'>"+money(c)+"</td></tr>";}).join("")+"</tbody></table></div>"
+"<td class='n'>"+money(mn.amount)+"</td><td class='n'>"+money(mn.got)+"</td>"+
+"<td class='n'>"+(mn.rem>0?"<span class='pill p-warn'>"+money(mn.rem)+"</span>":"<span class='pill p-ok'>مكتمل</span>")+"</td></tr>";}).join("")+"</tbody></table></div>"
 :"<div class='empty'><b>لا مشاريع جارية</b>أضف مشروعاً من صفحة المشاريع.</div>";
 return h+"</div>";
 }
@@ -822,18 +942,26 @@ return h+"</div>";
 function vProjects(){
 const rows=DB.projects.filter(p=>match(p.title+" "+clientName(p.clientId)+" "+p.desc));
 let h="<div class='panel'><div class='panel-h'><h2>المشاريع</h2><span class='grow'></span>"+searchBar("ابحث باسم المشروع أو العميل…")+"</div>";
-h+=rows.length?"<div class='tw'><table><thead><tr><th>المشروع</th><th>العميل</th><th>المدة</th><th>الحالة</th><th>المبلغ</th><th>كلفة الفريق</th><th>الربح</th><th>المحصَّل</th><th></th></tr></thead><tbody>"+
+const T=rows.reduce((a,p)=>{const m=projectMoney(p),f=projectProfit(p);a.amt+=m.amount;a.got+=m.got;a.rem+=m.rem;a.cost+=f.cost;a.ex+=f.ex;a.pf+=f.profit;return a;},{amt:0,got:0,rem:0,cost:0,ex:0,pf:0});
+h+=rows.length?"<div class='tw'><table><thead><tr><th>المشروع</th><th>العميل</th><th>المدة</th><th>الحالة</th><th>المبلغ</th><th>الواصل</th><th>الباقي</th><th>كلفة الفريق</th><th>صرفيات</th><th>صافي الربح</th><th></th></tr></thead><tbody>"+
 rows.map(p=>{
-const inv=DB.invoices.filter(i=>i.projectId===p.id),paid=inv.reduce((s,i)=>s+invStatus(i).paid,0);
-const cost=teamCostOfProject(p.id),profit=Number(p.amount||0)-cost;
+const mn=projectMoney(p),f=projectProfit(p);
 const late=p.end&&p.end<today()&&p.status==="قيد التنفيذ";
 return "<tr><td><b>"+esc(p.title)+"</b>"+(p.desc?"<div class='t2'>"+esc(p.desc)+"</div>":"")+"</td><td>"+esc(clientName(p.clientId))+"</td>"+
 "<td class='n'>"+fdate(p.start)+" ← "+fdate(p.end)+(late?"<div class='t2' style='color:var(--danger)'>تجاوز الموعد</div>":"")+"</td>"+
 "<td><span class='pill "+statusPill(p.status)+"'>"+esc(p.status)+"</span></td>"+
-"<td class='n'>"+money(p.amount)+"</td><td class='n'>"+money(cost)+"</td>"+
-"<td class='n' style='color:"+(profit<0?"var(--danger)":"var(--ok)")+"'>"+money(profit)+"</td><td class='n'>"+money(paid)+"</td>"+
-"<td><div class='rowact'>"+act("worksheet",p.id,"كشف أعمال")+(canEdit()?act("project-edit",p.id,"تعديل","gh"):"")+
-(canAdmin()?act("project-del",p.id,"حذف","gh dg"):"")+"</div></td></tr>";}).join("")+"</tbody></table></div>"
+"<td class='n'>"+money(mn.amount)+"</td><td class='n'>"+money(mn.got)+"</td>"+
+"<td class='n'>"+(mn.rem>0?"<span class='pill p-warn'>"+money(mn.rem)+"</span>":"<span class='pill p-ok'>مكتمل</span>")+"</td>"+
+"<td class='n'>"+money(f.cost)+"</td><td class='n'>"+money(f.ex)+"</td>"+
+"<td class='n' style='color:"+(f.profit<0?"var(--danger)":"var(--ok)")+"'>"+money(f.profit)+"</td>"+
+"<td><div class='rowact'>"+act("project-statement",p.id,"كشف مالي")+act("worksheet",p.id,"الأعمال","gh")+
+(canEdit()&&mn.rem>0?act("project-pay-for",p.id,"تسديد"):"")+
+(canEdit()?act("project-edit",p.id,"تعديل","gh"):"")+
+(canAdmin()?act("project-del",p.id,"حذف","gh dg"):"")+"</div></td></tr>";}).join("")+
+"<tr class='sum'><td colspan='4'><b>المجموع</b></td><td class='n'><b>"+money(T.amt)+"</b></td><td class='n'><b>"+money(T.got)+"</b></td>"+
+"<td class='n'><b>"+money(T.rem)+"</b></td><td class='n'><b>"+money(T.cost)+"</b></td><td class='n'><b>"+money(T.ex)+"</b></td>"+
+"<td class='n'><b>"+money(T.pf)+"</b></td><td></td></tr>"+
+"</tbody></table></div>"
 :"<div class='empty'><b>لا توجد مشاريع</b>أضف مشروعاً واربطه بعميل.</div>";
 return h+"</div>";
 }
@@ -857,19 +985,24 @@ const tot=DB.team.reduce((a,m)=>{const c=memberCalc(m);a.e+=c.earned;a.p+=c.paid
 let h="<div class='strip'>"+
 "<div class='stat'><span class='k'>عدد الأعضاء</span><span class='v'>"+DB.team.filter(m=>m.active!==false).length+"</span></div>"+
 "<div class='stat'><span class='k'>إجمالي المستحق</span><span class='v'>"+num(tot.e)+"<small>"+DB.settings.currency+"</small></span></div>"+
-"<div class='stat ok'><span class='k'>المدفوع والسلف</span><span class='v'>"+num(tot.p)+"<small>"+DB.settings.currency+"</small></span></div>"+
-"<div class='stat dg'><span class='k'>المتبقي للفريق</span><span class='v'>"+num(tot.d)+"<small>"+DB.settings.currency+"</small></span></div></div>";
+"<div class='stat ok'><span class='k'>الواصل لهم</span><span class='v'>"+num(tot.p)+"<small>"+DB.settings.currency+"</small></span></div>"+
+"<div class='stat dg'><span class='k'>الباقي لهم</span><span class='v'>"+num(tot.d)+"<small>"+DB.settings.currency+"</small></span></div></div>";
 h+="<div class='panel'><div class='panel-h'><h2>أعضاء الفريق</h2><span class='grow'></span>"+searchBar("ابحث بالاسم أو العمل…")+"</div>";
-h+=rows.length?"<div class='tw'><table><thead><tr><th>العضو</th><th>نظام الأجر</th><th>القيمة</th><th>المستحق</th><th>المستلم</th><th>خصومات</th><th>المتبقي له</th><th></th></tr></thead><tbody>"+
+h+=rows.length?"<div class='tw'><table><thead><tr><th>العضو</th><th>نظام الأجر</th><th>القيمة</th><th>المستحق</th><th>الواصل</th><th>خصومات</th><th>الباقي له</th><th>نسبة التسديد</th><th></th></tr></thead><tbody>"+
 rows.map(m=>{const c=memberCalc(m);
 const basis=m.payType==="راتب شهري"?money(m.salary)+" / شهر":m.payType==="بالساعة"?money(m.hourRate)+" / ساعة":money(m.pieceRate)+" / "+(m.pieceUnit||"قطعة");
+const pc=c.earned>0?Math.max(0,Math.min(100,Math.round(c.paidOut/c.earned*100))):0;
 return "<tr><td><div class='who'><span class='av'>"+esc(initials(m.name))+"</span><span><b>"+esc(m.name)+"</b>"+
 (m.job?"<div class='t2'>"+esc(m.job)+"</div>":"")+"</span></div></td>"+
 "<td><span class='pill p-mut np'>"+esc(m.payType||"—")+"</span>"+(m.active===false?" <span class='pill p-dg'>موقوف</span>":"")+"</td>"+
 "<td class='n'>"+basis+"</td><td class='n'>"+money(c.earned)+"</td><td class='n'>"+money(c.paidOut)+"</td><td class='n'>"+money(c.ded)+"</td>"+
-"<td class='n'><span class='pill "+(c.due>0?"p-warn":"p-ok")+"'>"+money(c.due)+"</span></td>"+
-"<td><div class='rowact'>"+act("member-statement",m.id,"كشف حساب")+(canEdit()?act("member-pay",m.id,"دفعة"):"")+
+"<td class='n'><span class='pill "+(c.due>0?"p-warn":c.due<0?"p-dg":"p-ok")+"'>"+money(c.due)+"</span></td>"+
+"<td><div class='row' style='gap:8px'><span class='bar'><i style='width:"+pc+"%'></i></span><span class='t2 num'>"+pc+"%</span></div></td>"+
+"<td><div class='rowact'>"+(canEdit()&&c.due>0?act("member-settle",m.id,"تسديد"):"")+
+act("member-statement",m.id,"كشف","gh")+(canEdit()?act("member-pay",m.id,"حركة","gh"):"")+
 (canEdit()?act("member-edit",m.id,"تعديل","gh"):"")+(canAdmin()?act("member-del",m.id,"حذف","gh dg"):"")+"</div></td></tr>";}).join("")+
+"<tr class='sum'><td colspan='3'><b>المجموع</b></td><td class='n'><b>"+money(tot.e)+"</b></td><td class='n'><b>"+money(tot.p)+"</b></td>"+
+"<td class='n'></td><td class='n'><b>"+money(tot.d)+"</b></td><td colspan='2'></td></tr>"+
 "</tbody></table></div>":"<div class='empty'><b>لا يوجد أعضاء</b>أضف أعضاء الفريق وحدّد نظام أجر كل واحد: راتب شهري، أو بالقطعة، أو بالساعة.</div>";
 return h+"</div>";
 }
@@ -924,15 +1057,90 @@ return "<tr><td><b>"+esc(i.no)+"</b></td><td>"+esc(clientName(i.clientId))+"<div
 return h+"</div>";
 }
 function vPayments(){
-const rows=DB.payments.filter(p=>{const i=byId(DB.invoices,p.invoiceId)||{};return match((p.no||"")+" "+(i.no||"")+" "+clientName(i.clientId)+" "+p.method);}).sort((a,b)=>a.date<b.date?1:-1);
-let h="<div class='panel'><div class='panel-h'><h2>الدفعات المستلمة</h2><span class='grow'></span>"+searchBar("ابحث برقم الوصل أو العميل…")+"</div>";
-h+=rows.length?"<div class='tw'><table><thead><tr><th>رقم الوصل</th><th>التاريخ</th><th>العميل</th><th>الفاتورة</th><th>الطريقة</th><th>المبلغ</th><th></th></tr></thead><tbody>"+
-rows.map(p=>{const i=byId(DB.invoices,p.invoiceId)||{};
-return "<tr><td><b>"+esc(p.no||"—")+"</b></td><td class='n'>"+fdate(p.date)+"</td><td>"+esc(clientName(i.clientId))+"</td>"+
-"<td>"+esc(i.no||"—")+"<div class='t2'>"+esc(projectTitle(i.projectId))+"</div></td><td>"+esc(p.method||"—")+"</td><td class='n'>"+money(p.amount)+"</td>"+
-"<td><div class='rowact'>"+act("receipt",p.id,"طباعة الوصل")+(canEdit()?act("payment-edit",p.id,"تعديل","gh"):"")+
-(canAdmin()?act("payment-del",p.id,"حذف","gh dg"):"")+"</div></td></tr>";}).join("")+"</tbody></table></div>"
-:"<div class='empty'><b>لا توجد دفعات</b>سجّل دفعة على فاتورة ليصدر لها وصل استلام.</div>";
+const rows=DB.payments.filter(x=>{const i=byId(DB.invoices,x.invoiceId)||{};
+return match((x.no||"")+" "+(i.no||"")+" "+clientName(paymentClient(x))+" "+projectTitle(paymentProject(x))+" "+x.method);}).sort((a,b)=>a.date<b.date?1:-1);
+const tot=rows.reduce((s,x)=>s+Number(x.amount||0),0);
+let h="<div class='panel'><div class='panel-h'><h2>الدفعات الواصلة</h2><span class='pill p-ok'>"+money(tot)+"</span><span class='grow'></span>"+searchBar("ابحث برقم الوصل أو العميل أو المشروع…")+"</div>";
+h+=rows.length?"<div class='tw'><table><thead><tr><th>رقم الوصل</th><th>التاريخ</th><th>العميل</th><th>المشروع</th><th>الفاتورة</th><th>الطريقة</th><th>المبلغ</th><th></th></tr></thead><tbody>"+
+rows.map(x=>{const i=byId(DB.invoices,x.invoiceId)||{};
+return "<tr><td><b>"+esc(x.no||"—")+"</b></td><td class='n'>"+fdate(x.date)+"</td><td>"+esc(clientName(paymentClient(x)))+"</td>"+
+"<td>"+esc(projectTitle(paymentProject(x)))+"</td>"+
+"<td>"+(x.invoiceId?esc(i.no||"—"):"<span class='pill p-mut np'>تسديد مباشر</span>")+"</td>"+
+"<td>"+esc(x.method||"—")+"</td><td class='n'>"+money(x.amount)+"</td>"+
+"<td><div class='rowact'>"+act("receipt",x.id,"وصل")+(canEdit()?act("payment-edit",x.id,"تعديل","gh"):"")+
+(canAdmin()?act("payment-del",x.id,"حذف","gh dg"):"")+"</div></td></tr>";}).join("")+"</tbody></table></div>"
+:"<div class='empty'><b>لا توجد دفعات</b>سجّل دفعة على فاتورة، أو تسديداً مباشراً على مشروع، ليصدر وصل استلام.</div>";
+return h+"</div>";
+}
+/* ---------- المصروفات ---------- */
+function vExpenses(){
+const cu=DB.settings.currency,mo=state.expMonth||"";
+let list=expList().slice();
+if(state.expCat)list=list.filter(x=>x.cat===state.expCat);
+if(mo)list=list.filter(x=>inMonth(x.date,mo));
+const rows=list.filter(x=>match((x.no||"")+" "+(x.cat||"")+" "+(x.vendor||"")+" "+(x.notes||"")+" "+projectTitle(x.projectId))).sort((a,b)=>a.date<b.date?1:-1);
+const sum=rows.reduce((s,x)=>s+Number(x.amount||0),0);
+const all=expTotal(),thisM=expTotal(x=>inMonth(x.date,thisMonth()));
+const linked=expTotal(x=>!!x.projectId);
+const byCat={};expList().forEach(x=>{byCat[x.cat||"أخرى"]=(byCat[x.cat||"أخرى"]||0)+Number(x.amount||0);});
+const cats=Object.entries(byCat).sort((a,b)=>b[1]-a[1]);
+const maxc=Math.max(1,...cats.map(c=>c[1]));
+let h="<div class='strip'>"+
+"<div class='stat wr'><span class='k'>إجمالي المصروفات</span><span class='v'>"+num(all)+"<small>"+cu+"</small></span></div>"+
+"<div class='stat'><span class='k'>مصروفات هذا الشهر</span><span class='v'>"+num(thisM)+"<small>"+cu+"</small></span></div>"+
+"<div class='stat'><span class='k'>مرتبطة بمشاريع</span><span class='v'>"+num(linked)+"<small>"+cu+"</small></span></div>"+
+"<div class='stat'><span class='k'>عدد السندات</span><span class='v'>"+expList().length+"</span></div></div>";
+h+="<div class='panel'><div class='panel-h'><h2>سجل الصرفيات</h2>"+
+"<span class='pill p-acc'>"+money(sum)+"</span><span class='grow'></span>"+
+"<select id='expCat' class='mini'><option value=''>كل التصنيفات</option>"+
+EXP_CATS.map(c=>"<option value='"+esc(c)+"'"+(state.expCat===c?" selected":"")+">"+esc(c)+"</option>").join("")+"</select>"+
+"<input type='month' id='expMonth' class='mini' value='"+esc(mo)+"'>"+
+"<button class='btn sm gh' data-act='exp-clear'>مسح الفلاتر</button>"+
+"<button class='btn sm' data-act='csv-expenses'>CSV</button>"+searchBar("ابحث في المصروفات…")+"</div>";
+h+=rows.length?"<div class='tw'><table><thead><tr><th>رقم السند</th><th>التاريخ</th><th>التصنيف</th><th>الجهة</th><th>المشروع</th><th>الطريقة</th><th>المبلغ</th><th></th></tr></thead><tbody>"+
+rows.map(x=>"<tr><td><b>"+esc(x.no||"—")+"</b></td><td class='n'>"+fdate(x.date)+"</td>"+
+"<td><span class='pill p-mut np'>"+esc(x.cat||"أخرى")+"</span></td><td>"+esc(x.vendor||"—")+
+(x.notes?"<div class='t2'>"+esc(x.notes)+"</div>":"")+"</td>"+
+"<td>"+(x.projectId?esc(projectTitle(x.projectId)):"<span class='t2'>عام</span>")+"</td>"+
+"<td>"+esc(x.method||"نقداً")+"</td><td class='n'>"+money(x.amount)+"</td>"+
+"<td><div class='rowact'>"+act("expense-print",x.id,"سند")+(canEdit()?act("expense-edit",x.id,"تعديل","gh"):"")+
+(canAdmin()?act("expense-del",x.id,"حذف","gh dg"):"")+"</div></td></tr>").join("")+
+"<tr class='sum'><td colspan='6'><b>مجموع المعروض</b></td><td class='n'><b>"+money(sum)+"</b></td><td></td></tr>"+
+"</tbody></table></div>"
+:"<div class='empty'><b>لا توجد مصروفات</b>سجّل أول مصروف ليدخل في حساب أرباح المشاريع وصافي الصندوق.</div>";
+h+="</div>";
+if(cats.length)h+="<div class='panel'><div class='panel-h'><h2>التوزيع حسب التصنيف</h2></div><div class='panel-b'>"+
+"<div class='catbars'>"+cats.map(([c,v])=>"<div class='catrow'><span class='cl'>"+esc(c)+"</span>"+
+"<span class='bar'><i style='width:"+Math.round(v/maxc*100)+"%'></i></span><span class='cv num'>"+money(v)+"</span></div>").join("")+"</div></div></div>";
+return h;
+}
+/* ---------- الصندوق ---------- */
+function vCash(){
+const cu=DB.settings.currency,t=totals();
+if(state.cashMonth===undefined)state.cashMonth=thisMonth();
+const mo=state.cashMonth;
+const rows=[
+...DB.payments.map(x=>({d:x.date,t:"وصل "+(x.no||"")+" — "+clientName(paymentClient(x))+(paymentProject(x)?" / "+projectTitle(paymentProject(x)):""),k:"وارد",in:Number(x.amount||0),out:0})),
+...expList().map(x=>({d:x.date,t:"سند صرف "+(x.no||"")+" — "+(x.cat||"")+(x.vendor?" / "+x.vendor:""),k:"صادر",in:0,out:Number(x.amount||0)})),
+...DB.payroll.filter(x=>["دفعة","سلفة"].includes(x.type)).map(x=>({d:x.date,t:x.type+" — "+memberName(x.memberId),k:"صادر",in:0,out:Number(x.amount||0)}))
+].filter(r=>!mo||inMonth(r.d,mo)).filter(r=>match(r.t)).sort((a,b)=>a.d<b.d?1:-1);
+const tin=rows.reduce((s,r)=>s+r.in,0),tout=rows.reduce((s,r)=>s+r.out,0);
+let h="<div class='strip'>"+
+"<div class='stat ok'><span class='k'>الوارد الكلي</span><span class='v'>"+num(t.paid)+"<small>"+cu+"</small></span></div>"+
+"<div class='stat wr'><span class='k'>الصادر الكلي</span><span class='v'>"+num(t.out)+"<small>"+cu+"</small></span></div>"+
+"<div class='stat "+(t.net<0?"dg":"ok")+"'><span class='k'>الرصيد</span><span class='v'>"+num(t.net)+"<small>"+cu+"</small></span></div>"+
+"<div class='stat'><span class='k'>رواتب مدفوعة</span><span class='v'>"+num(t.wages)+"<small>"+cu+"</small></span></div></div>";
+h+="<div class='panel'><div class='panel-h'><h2>حركة الصندوق</h2><span class='grow'></span>"+
+"<input type='month' id='cashMonth' class='mini' value='"+esc(mo)+"'>"+
+"<button class='btn sm gh' data-act='cash-all'>كل الفترات</button>"+
+"<button class='btn sm' data-act='csv-cash'>CSV</button>"+searchBar("ابحث…")+"</div>";
+h+=rows.length?"<div class='tw'><table><thead><tr><th>التاريخ</th><th>البيان</th><th>النوع</th><th>وارد</th><th>صادر</th></tr></thead><tbody>"+
+rows.map(r=>"<tr><td class='n'>"+fdate(r.d)+"</td><td>"+esc(r.t)+"</td>"+
+"<td><span class='pill "+(r.k==="وارد"?"p-ok":"p-warn")+"'>"+r.k+"</span></td>"+
+"<td class='n'>"+(r.in?money(r.in):"—")+"</td><td class='n'>"+(r.out?money(r.out):"—")+"</td></tr>").join("")+
+"<tr class='sum'><td colspan='3'><b>المجموع</b></td><td class='n'><b>"+money(tin)+"</b></td><td class='n'><b>"+money(tout)+"</b></td></tr>"+
+"<tr class='sum'><td colspan='4'><b>صافي الفترة</b></td><td class='n'><b>"+money(tin-tout)+"</b></td></tr>"+
+"</tbody></table></div>":"<div class='empty'><b>لا حركة في هذه الفترة</b>غيّر الشهر أو اختر «كل الفترات».</div>";
 return h+"</div>";
 }
 function vReports(){
@@ -945,15 +1153,28 @@ let h="<div class='panel'><div class='panel-h'><h2>كشف حساب عميل</h2>
 "<div class='field'><label>إلى تاريخ</label><input id='stT' type='date' value='"+today()+"'></div>"+
 "<div class='field' style='display:flex;align-items:flex-end'><button class='btn p wide' data-act='statement-run'>إصدار الكشف</button></div></div></div></div>";
 h+="<div class='panel'><div class='panel-h'><h2>ربحية المشاريع</h2><span class='grow'></span><button class='btn sm' data-act='csv-projects'>تصدير CSV</button></div>";
-h+=DB.projects.length?"<div class='tw'><table><thead><tr><th>المشروع</th><th>العميل</th><th>المبلغ</th><th>كلفة الفريق</th><th>الربح</th><th>هامش الربح</th></tr></thead><tbody>"+
-DB.projects.map(p=>{const c=teamCostOfProject(p.id),pr=Number(p.amount||0)-c,mg=p.amount?Math.round(pr/p.amount*100):0;
-return "<tr><td>"+esc(p.title)+"</td><td>"+esc(clientName(p.clientId))+"</td><td class='n'>"+money(p.amount)+"</td><td class='n'>"+money(c)+"</td>"+
-"<td class='n' style='color:"+(pr<0?"var(--danger)":"var(--ok)")+"'>"+money(pr)+"</td>"+
+h+=DB.projects.length?"<div class='tw'><table><thead><tr><th>المشروع</th><th>العميل</th><th>المبلغ</th><th>الواصل</th><th>الباقي</th><th>كلفة الفريق</th><th>صرفيات</th><th>صافي الربح</th><th>الهامش</th></tr></thead><tbody>"+
+DB.projects.map(p=>{const f=projectProfit(p),mn=projectMoney(p),mg=p.amount?Math.round(f.profit/p.amount*100):0;
+return "<tr><td>"+esc(p.title)+"</td><td>"+esc(clientName(p.clientId))+"</td><td class='n'>"+money(p.amount)+"</td>"+
+"<td class='n'>"+money(mn.got)+"</td><td class='n'>"+money(mn.rem)+"</td>"+
+"<td class='n'>"+money(f.cost)+"</td><td class='n'>"+money(f.ex)+"</td>"+
+"<td class='n' style='color:"+(f.profit<0?"var(--danger)":"var(--ok)")+"'>"+money(f.profit)+"</td>"+
 "<td><div class='row' style='gap:8px'><span class='bar'><i style='width:"+Math.max(0,Math.min(100,mg))+"%'></i></span><span class='t2 num'>"+mg+"%</span></div></td></tr>";}).join("")+
 "</tbody></table></div>":"<div class='empty'><b>لا مشاريع</b></div>";
 h+="</div>";
+const cu=DB.settings.currency;
+h+="<div class='panel'><div class='panel-h'><h2>ملخص الأرباح والخسائر</h2><span class='grow'></span><button class='btn sm' data-act='csv-cash'>تصدير حركة الصندوق</button></div>"+
+"<div class='tw'><table><tbody>"+
+"<tr><td>الإيرادات المحصَّلة (الواصل)</td><td class='n'>"+money(t.paid)+"</td></tr>"+
+"<tr><td>ناقص: المصروفات</td><td class='n'>"+money(t.exp)+"</td></tr>"+
+"<tr><td>ناقص: الأجور والسلف المدفوعة</td><td class='n'>"+money(t.wages)+"</td></tr>"+
+"<tr class='sum'><td><b>صافي الصندوق</b></td><td class='n'><b>"+money(t.net)+"</b></td></tr>"+
+"<tr><td>الباقي على العملاء (لم يُحصَّل)</td><td class='n'>"+money(t.due)+"</td></tr>"+
+"<tr><td>الباقي لأعضاء الفريق</td><td class='n'>"+money(teamDueTotal())+"</td></tr>"+
+"</tbody></table></div></div>";
 h+="<div class='panel'><div class='panel-h'><h2>ملخص حسب العميل</h2><span class='grow'></span>"+
 "<button class='btn sm' data-act='csv-clients'>تصدير العملاء</button><button class='btn sm' data-act='csv-invoices'>تصدير الفواتير</button>"+
+"<button class='btn sm' data-act='csv-expenses'>تصدير المصروفات</button>"+
 "<button class='btn sm' data-act='csv-team'>تصدير مستحقات الفريق</button></div>";
 h+=perClient.length?"<div class='tw'><table><thead><tr><th>العميل</th><th>إجمالي الفواتير</th><th>المحصَّل</th><th>المتبقي</th><th>نسبة التحصيل</th></tr></thead><tbody>"+
 perClient.map(r=>{const pc=r.tot?Math.round(r.paid/r.tot*100):0;
@@ -962,9 +1183,10 @@ return "<tr><td>"+esc(r.c.name)+"</td><td class='n'>"+money(r.tot)+"</td><td cla
 "<tr><td><b>المجموع</b></td><td class='n'><b>"+money(t.inv)+"</b></td><td class='n'><b>"+money(t.paid)+"</b></td><td class='n'><b>"+money(t.due)+"</b></td><td></td></tr>"+
 "</tbody></table></div>":"<div class='empty'><b>لا بيانات</b></div>";
 h+="</div>";
-h+="<div class='panel'><div class='panel-h'><h2>كشف أعمال لمشروع</h2></div><div class='panel-b'><div class='grid2'>"+
+h+="<div class='panel'><div class='panel-h'><h2>كشوفات المشروع</h2></div><div class='panel-b'><div class='grid2'>"+
 "<div class='field full'><label>المشروع</label><select id='wsP'>"+DB.projects.map(p=>"<option value='"+p.id+"'>"+esc(p.title)+" — "+esc(clientName(p.clientId))+"</option>").join("")+"</select></div>"+
-"<div class='field'><button class='btn p' data-act='worksheet-run'>إصدار كشف الأعمال</button></div></div></div></div>";
+"<div class='field'><button class='btn p wide' data-act='worksheet-run'>كشف الأعمال</button></div>"+
+"<div class='field'><button class='btn wide' data-act='project-statement-run'>الكشف المالي</button></div></div></div></div>";
 return h;
 }
 /* ---------- settings ---------- */
@@ -1000,6 +1222,13 @@ h+="<div class='panel'><div class='panel-h'><h2>مستخدمو هذا الحسا
 act("user-edit",u.id,"تعديل","gh")+act("user-code",u.id,"كود جديد","gh")+
 ((TENANT.users.length>1)?act("user-del",u.id,"حذف","gh dg"):"")+"</div></td></tr>").join("")+"</tbody></table></div></div>";
 }
+h+="<div class='panel'><div class='panel-h'><h2>الأمان</h2><span class='grow'></span><span class='pill p-acc'>حماية بيانات الحساب</span></div><div class='panel-b'><div class='grid2'>"+
+"<div class='field'><label>قفل الشاشة بعد خمول (دقيقة)</label><input id='s_lock' type='number' min='0' step='1' value='"+esc(s.lockMin==null?30:s.lockMin)+"'><div class='hint'>٠ = تعطيل القفل التلقائي.</div></div>"+
+"<div class='field'><label>إخفاء المبالغ في الشاشة</label><select id='s_blur'><option value='0'"+(s.blur?"":" selected")+">إظهار</option><option value='1'"+(s.blur?" selected":"")+">إخفاء حتى المرور بالمؤشر</option></select><div class='hint'>مفيد عند العمل في مكان مفتوح.</div></div>"+
+"<div class='field full'><button class='btn p' id='saveSec'>حفظ إعدادات الأمان</button> <button class='btn gh' data-act='lock-now'>قفل الشاشة الآن</button></div>"+
+"</div><div class='hint' style='margin-top:6px'>سجل العمليات يحفظ آخر ٣٠٠ حركة حساسة (حذف/تعديل/تسديد) داخل هذا الحساب.</div>"+
+"<div class='row' style='margin-top:10px'><button class='btn' data-act='audit-view'>عرض سجل العمليات</button>"+
+(canAdmin()?"<button class='btn gh' data-act='audit-csv'>تصدير السجل</button>":"")+"</div></div></div>";
 h+="<div class='panel'><div class='panel-h'><h2>النسخ الاحتياطي</h2></div><div class='panel-b'>"+
 "<p style='margin:0 0 14px;color:var(--ink2)'>بيانات هذا الحساب محفوظة داخل هذا الجهاز/المتصفح. خذ نسخة بين فترة وأخرى.</p>"+
 "<div class='row'><button class='btn p' data-act='backup'>تنزيل نسخة</button>"+
@@ -1014,6 +1243,12 @@ if(b)b.onclick=()=>{
 DB.settings.rate=Number($("#s_rate").value||0);
 if(!DB.settings.currency)DB.settings.currency="د.ع";
 save();render();toast("تم الحفظ");
+};
+const sc=$("#saveSec");
+if(sc)sc.onclick=()=>{
+const v=Math.max(0,Math.min(720,Number($("#s_lock").value||0)));
+DB.settings.lockMin=v;DB.settings.blur=$("#s_blur").value==="1";
+save();applyBlur();resetIdle();render();toast("تم حفظ إعدادات الأمان");
 };
 const sb=$("#saveBrand");
 if(sb)sb.onclick=()=>{
@@ -1174,7 +1409,7 @@ ROOT.owner.pass=$("#ow_pass").value;save();render();toast("تم حفظ بيان�
 const CFG={url:"https://oaylgihgoigydwlyeyib.supabase.co",key:"sb_publishable_cEgvqCeTR5_ORV6bTogzxQ_RGClBhNN"};
 try{const c=JSON.parse(localStorage.getItem(KEY+".cfg")||"null");if(c&&c.url&&c.key){CFG.url=c.url;CFG.key=c.key;}}catch(e){}
 const netConfigured=()=>/^https?:\/\//.test(CFG.url)&&CFG.key&&CFG.key.length>20;
-const KINDS=["clients","projects","logs","team","pieces","payroll","invoices","payments"];
+const KINDS=["clients","projects","logs","team","pieces","payroll","invoices","payments","expenses"];
 const NET={sb:null,user:null,owner:false,list:[],status:"غير متصل",busy:false,timer:null,dirty:false};
 function netStatusPill(){
 const cls=NET.status==="متصل"?"p-ok":NET.status==="جارٍ المزامنة"?"p-acc":NET.status==="غير متصل"?"p-mut":"p-warn";
@@ -1214,6 +1449,7 @@ const d=blankData();
 (data||[]).forEach(r=>{
 if(r.deleted)return;
 if(r.kind==="settings"){d.settings=Object.assign(d.settings,r.data||{});return;}
+if(r.kind==="audit"){d.audit=(r.data&&r.data.list)||[];return;}
 if(KINDS.includes(r.kind))d[r.kind].push(Object.assign({id:r.id},r.data||{}));
 });
 ROOT.data[tid]=d;DB=d;
@@ -1227,6 +1463,7 @@ const data=Object.assign({},o);delete data.id;
 rows.push({id:o.id,tenant_id:tid,kind:k,data,deleted:false});
 }));
 rows.push({id:"main",tenant_id:tid,kind:"settings",data:DB.settings||{},deleted:false});
+rows.push({id:"main",tenant_id:tid,kind:"audit",data:{list:(DB.audit||[]).slice(-300)},deleted:false});
 return rows;
 }
 async function netPush(){
@@ -1498,17 +1735,73 @@ openForm(inv?"تعديل فاتورة":"فاتورة جديدة",[
 if(inv)Object.assign(inv,v);else DB.invoices.push(Object.assign({id:uid()},v));save();render();toast("تم الحفظ");});
 }
 function paymentForm(p,presetInvoice){
-if(!DB.invoices.length){toast("أنشئ فاتورة أولاً");return;}
-const opts=DB.invoices.map(i=>({v:i.id,t:i.no+" — "+clientName(i.clientId)+" (متبقي "+num(invStatus(i).rem)+")"}));
+if(!DB.invoices.length){toast("أنشئ فاتورة أولاً، أو استخدم «تسديد على مشروع»");return;}
+const opts=DB.invoices.map(i=>({v:i.id,t:i.no+" — "+clientName(i.clientId)+" (باقي "+num(invStatus(i).rem)+")"}));
 const pre=p||{no:nextNo("REC",DB.payments),date:today(),invoiceId:presetInvoice||DB.invoices[0].id,method:"نقداً",
 amount:presetInvoice?invStatus(byId(DB.invoices,presetInvoice)).rem:0};
-openForm(p?"تعديل دفعة":"تسجيل دفعة",[
+openForm(p?"تعديل دفعة":"تسجيل دفعة على فاتورة",[
 {name:"no",label:"رقم الوصل",req:true},{name:"invoiceId",label:"الفاتورة",type:"select",opts:opts,req:true},
-{name:"date",label:"تاريخ الاستلام",type:"date",req:true},{name:"amount",label:"المبلغ المستلم",type:"number",req:true},
-{name:"method",label:"طريقة الدفع",type:"select",opts:["نقداً","تحويل مصرفي","صك","محفظة إلكترونية","أخرى"].map(x=>({v:x,t:x}))},
+{name:"date",label:"تاريخ الاستلام",type:"date",req:true},{name:"amount",label:"المبلغ الواصل",type:"number",req:true,pos:true},
+{name:"method",label:"طريقة الدفع",type:"select",opts:PAYMETHODS.map(x=>({v:x,t:x}))},
 {name:"notes",label:"ملاحظات",span:true}
-],pre,v=>{let rec;if(p){Object.assign(p,v);rec=p;}else{rec=Object.assign({id:uid()},v);DB.payments.push(rec);}
+],pre,v=>{
+let rec;if(p){Object.assign(p,v);rec=p;}else{rec=Object.assign({id:uid(),projectId:""},v);DB.payments.push(rec);}
+audit(p?"تعديل دفعة":"تسجيل دفعة",(rec.no||"")+" — "+money(rec.amount));
 save();render();toast("تم تسجيل الدفعة");if(!p)setTimeout(()=>receiptDoc(rec),150);});
+}
+function projectPayForm(presetProject){
+if(!DB.projects.length){toast("أضف مشروعاً أولاً");return;}
+const pid=presetProject||DB.projects[0].id;
+const opts=DB.projects.map(x=>{const m=projectMoney(x);return{v:x.id,t:x.title+" — "+clientName(x.clientId)+" (باقي "+num(m.rem)+")"};});
+openForm("تسديد مباشر على مشروع",[
+{name:"no",label:"رقم الوصل",req:true},
+{name:"projectId",label:"المشروع",type:"select",opts:opts,req:true,span:true},
+{name:"date",label:"تاريخ الاستلام",type:"date",req:true},
+{name:"amount",label:"المبلغ الواصل",type:"number",req:true,pos:true},
+{name:"method",label:"طريقة الدفع",type:"select",opts:PAYMETHODS.map(x=>({v:x,t:x}))},
+{name:"notes",label:"ملاحظات",span:true}
+],{no:nextNo("REC",DB.payments),date:today(),projectId:pid,method:"نقداً",amount:projectMoney(byId(DB.projects,pid)||{}).rem||0},
+v=>{
+const rec=Object.assign({id:uid(),invoiceId:""},v);
+DB.payments.push(rec);audit("تسديد على مشروع",projectTitle(rec.projectId)+" — "+money(rec.amount));
+save();render();toast("تم تسجيل التسديد");setTimeout(()=>receiptDoc(rec),150);
+});
+}
+function expenseForm(x){
+const pre=x||{no:nextNo("EXP",expList()),date:today(),cat:EXP_CATS[0],method:"نقداً",projectId:""};
+openForm(x?"تعديل مصروف":"تسجيل مصروف",[
+{name:"no",label:"رقم السند",req:true},
+{name:"date",label:"التاريخ",type:"date",req:true},
+{name:"cat",label:"التصنيف",type:"select",opts:EXP_CATS.map(c=>({v:c,t:c})),req:true},
+{name:"amount",label:"المبلغ",type:"number",req:true,pos:true},
+{name:"vendor",label:"الجهة المستفيدة",ph:"اسم المجهز أو الشخص"},
+{name:"method",label:"طريقة الدفع",type:"select",opts:PAYMETHODS.map(c=>({v:c,t:c}))},
+{name:"projectId",label:"المشروع (اختياري)",type:"select",opts:[{v:"",t:"— مصروف عام —"}].concat(projOpts()),
+hint:"عند الربط بمشروع يُخصم من ربحه"},
+{name:"notes",label:"البيان / ملاحظات",span:true}
+],pre,v=>{
+let rec;if(x){Object.assign(x,v);rec=x;}else{rec=Object.assign({id:uid()},v);expList().push(rec);}
+audit(x?"تعديل مصروف":"تسجيل مصروف",(rec.no||"")+" — "+(rec.cat||"")+" — "+money(rec.amount));
+save();render();toast("تم الحفظ");if(!x)setTimeout(()=>expenseDoc(rec),150);
+});
+}
+function settleForm(memberId){
+const m=byId(DB.team,memberId);if(!m)return;
+const c=memberCalc(m);
+if(c.due<=0){toast("لا يوجد باقٍ على هذا العضو");return;}
+openForm("تسديد مستحقات — "+m.name,[
+{name:"amount",label:"المبلغ المسدَّد",type:"number",req:true,pos:true,hint:"الباقي له: "+money(c.due)},
+{name:"date",label:"التاريخ",type:"date",req:true},
+{name:"no",label:"رقم الوصل",req:true},
+{name:"method",label:"طريقة الدفع",type:"select",opts:PAYMETHODS.map(t=>({v:t,t:t}))},
+{name:"month",label:"الشهر (اختياري)",type:"month"},
+{name:"note",label:"ملاحظات",span:true}
+],{amount:c.due,date:today(),no:nextNo("PAY",DB.payroll),method:"نقداً",month:thisMonth()},
+v=>{
+const rec=Object.assign({id:uid(),memberId:memberId,type:"دفعة",projectId:""},v);
+DB.payroll.push(rec);audit("تسديد راتب",m.name+" — "+money(rec.amount));
+save();render();toast("تم التسديد");setTimeout(()=>payrollReceiptDoc(rec),150);
+});
 }
 function memberForm(m){
 openForm(m?"تعديل عضو":"عضو فريق جديد",[
@@ -1595,6 +1888,77 @@ if(u)Object.assign(u,v);else TENANT.users.push(Object.assign({id:uid()},v));
 save();render();toast("تم الحفظ");
 });
 }
+/* ================= الأمان ================= */
+function audit(action,detail){
+try{
+if(!DB)return;
+DB.audit=DB.audit||[];
+DB.audit.push({t:new Date().toISOString(),u:(ME&&ME.name)||"مالك النظام",a:action,d:String(detail||"").slice(0,160)});
+if(DB.audit.length>300)DB.audit=DB.audit.slice(-300);
+if(ROOT.session&&ROOT.session.net&&TENANT&&typeof rpc==="function")
+rpc("log_event",{p_tenant:TENANT.id,p_action:String(action).slice(0,80),p_detail:String(detail||"").slice(0,300)}).catch(()=>{});
+}catch(e){}
+}
+function auditRows(list){
+return "<div class='tw' style='max-height:60vh;overflow:auto'><table><thead><tr><th>الوقت</th><th>المستخدم</th><th>العملية</th><th>التفاصيل</th></tr></thead><tbody>"+
+list.map(r=>"<tr><td class='n'>"+esc(String(r.t).slice(0,16).replace("T"," "))+"</td><td>"+esc(r.u)+"</td><td>"+esc(r.a)+"</td><td>"+esc(r.d)+"</td></tr>").join("")+
+"</tbody></table></div>";
+}
+async function auditView(){
+let rows=((DB&&DB.audit)||[]).slice().reverse();
+let src="محلي على هذا الجهاز";
+if(ROOT.session&&ROOT.session.net&&TENANT){
+try{
+const s=await rpc("tenant_audit",{p_tenant:TENANT.id,p_limit:300});
+if(Array.isArray(s)&&s.length){
+rows=s.map(r=>({t:String(r.at||"").replace(" ","T"),u:r.actor_email||"—",a:r.action,d:r.detail}));
+src="سجل الخادم (غير قابل للتعديل)";
+}
+}catch(e){}
+}
+openModal("سجل العمليات — "+src,
+rows.length?auditRows(rows):"<div class='empty'><b>السجل فارغ</b>ستظهر هنا العمليات الحساسة.</div>",
+"<button class='btn' data-close='1'>إغلاق</button>");
+}
+function applyBlur(){
+try{document.body.classList.toggle("blurmoney",!!(DB&&DB.settings&&DB.settings.blur));}catch(e){}
+}
+let idleT=null,LOCKED=false;
+function lockMinutes(){const v=DB&&DB.settings?Number(DB.settings.lockMin):30;return isNaN(v)?30:v;}
+function resetIdle(){
+clearTimeout(idleT);
+const m=lockMinutes();
+if(!m||LOCKED||!DB)return;
+idleT=setTimeout(lockScreen,m*60*1000);
+}
+function lockScreen(){
+if(LOCKED||!DB)return;
+LOCKED=true;clearTimeout(idleT);
+const ov=document.createElement("div");ov.id="lockov";
+ov.innerHTML="<div class='lockcard'><img class='authlogo' src='"+logoSys()+"' alt='GRDlabs system'>"+
+"<h1>الشاشة مقفلة</h1><div class='lead'>تم القفل تلقائياً لحماية بيانات "+esc((TENANT&&TENANT.name)||"الحساب")+".</div>"+
+"<div class='field'><label>"+(isOwnerSession()&&ROOT.owner&&!ROOT.session.net?"كلمة مرور المالك":"اكتب اسمك للمتابعة")+"</label>"+
+"<input id='lockPass' type='"+(isOwnerSession()&&ROOT.owner&&!ROOT.session.net?"password":"text")+"' autocomplete='off'></div>"+
+"<div class='err' id='lockErr' hidden></div>"+
+"<button class='btn p wide' id='lockGo'>فتح</button>"+
+"<button class='btn gh wide' id='lockOut' style='margin-top:8px'>تسجيل الخروج</button></div>";
+document.body.appendChild(ov);
+const unlock=()=>{
+const v=($("#lockPass").value||"").trim();
+const localOwner=isOwnerSession()&&ROOT.owner&&!(ROOT.session&&ROOT.session.net);
+const ok=localOwner?(v===ROOT.owner.pass):(v.length>0&&(!ME||!ME.name||v===String(ME.name).trim()));
+if(!ok){const e=$("#lockErr");e.hidden=false;e.textContent="غير صحيح — حاول مرة أخرى.";return;}
+LOCKED=false;ov.remove();resetIdle();
+};
+$("#lockGo").onclick=unlock;
+$("#lockPass").onkeydown=e=>{if(e.key==="Enter")unlock();};
+$("#lockPass").focus();
+$("#lockOut").onclick=()=>{LOCKED=false;ov.remove();
+const b=document.createElement("button");b.dataset.act="logout";b.style.display="none";
+document.body.appendChild(b);b.click();b.remove();};
+}
+["click","keydown","mousemove","touchstart","scroll"].forEach(ev=>
+document.addEventListener(ev,()=>{if(!LOCKED)resetIdle();},{passive:true}));
 /* ================= actions ================= */
 document.addEventListener("click",e=>{
 const go=e.target.closest("[data-go]");
@@ -1609,7 +1973,8 @@ return;
 const el=e.target.closest("[data-act]");if(!el)return;
 const a=el.dataset.act,id=el.dataset.id;
 const needEdit=["client-new","client-edit","project-new","project-edit","log-new","log-edit","member-new","member-edit",
-"piece-new","piece-edit","ptx-new","ptx-edit","invoice-new","invoice-edit","payment-new","payment-edit","pay-for","member-pay","accrue"];
+"piece-new","piece-edit","ptx-new","ptx-edit","invoice-new","invoice-edit","payment-new","payment-edit","pay-for","member-pay","accrue",
+"expense-new","expense-edit","member-settle","project-pay","project-pay-for"];
 if(needEdit.includes(a)&&!canEdit()){toast("صلاحيتك للعرض فقط");return;}
 const F={
 /* clients */
@@ -1617,7 +1982,8 @@ const F={
 "client-del":()=>askConfirm("سيتم حذف العميل مع مشاريعه وفواتيره ودفعاته. متابعة؟",()=>{
 const projs=DB.projects.filter(p=>p.clientId===id).map(p=>p.id);
 const invs=DB.invoices.filter(i=>i.clientId===id||projs.includes(i.projectId)).map(i=>i.id);
-DB.payments=DB.payments.filter(p=>!invs.includes(p.invoiceId));
+DB.payments=DB.payments.filter(p=>!invs.includes(p.invoiceId)&&!(!p.invoiceId&&projs.includes(p.projectId)));
+DB.expenses=expList().filter(x=>!projs.includes(x.projectId));
 DB.invoices=DB.invoices.filter(i=>!invs.includes(i.id));
 DB.logs=DB.logs.filter(l=>!projs.includes(l.projectId));
 DB.pieces=DB.pieces.filter(x=>!projs.includes(x.projectId));
@@ -1625,13 +1991,35 @@ DB.projects=DB.projects.filter(p=>p.clientId!==id);
 DB.clients=DB.clients.filter(c=>c.id!==id);save();render();toast("تم الحذف");}),
 /* projects */
 "project-new":()=>projectForm(null),"project-edit":()=>projectForm(byId(DB.projects,id)),
-"project-del":()=>askConfirm("سيتم حذف المشروع مع سجلاته وفواتيره. متابعة؟",()=>{
+"project-del":()=>askConfirm("سيتم حذف المشروع مع سجلاته وفواتيره ودفعاته ومصروفاته. متابعة؟",()=>{
+audit("حذف مشروع",projectTitle(id));
 const invs=DB.invoices.filter(i=>i.projectId===id).map(i=>i.id);
-DB.payments=DB.payments.filter(p=>!invs.includes(p.invoiceId));
+DB.payments=DB.payments.filter(p=>!invs.includes(p.invoiceId)&&!(!p.invoiceId&&p.projectId===id));
 DB.invoices=DB.invoices.filter(i=>i.projectId!==id);
 DB.logs=DB.logs.filter(l=>l.projectId!==id);
 DB.pieces=DB.pieces.filter(x=>x.projectId!==id);
+DB.expenses=expList().filter(x=>x.projectId!==id);
 DB.projects=DB.projects.filter(p=>p.id!==id);save();render();toast("تم الحذف");}),
+"project-statement":()=>projectStatementDoc(id),
+"project-statement-run":()=>projectStatementDoc($("#wsP").value),
+"project-pay":()=>projectPayForm(null),
+"project-pay-for":()=>projectPayForm(id),
+/* expenses */
+"expense-new":()=>expenseForm(null),
+"expense-edit":()=>expenseForm(byId(expList(),id)),
+"expense-print":()=>expenseDoc(byId(expList(),id)),
+"expense-del":()=>askConfirm("حذف هذا المصروف؟",()=>{
+const x=byId(expList(),id)||{};audit("حذف مصروف",(x.no||"")+" — "+money(x.amount||0));
+DB.expenses=expList().filter(e=>e.id!==id);save();render();toast("تم الحذف");}),
+"exp-clear":()=>{state.expCat="";state.expMonth="";state.q="";render();},
+"cash-all":()=>{state.cashMonth="";render();},
+/* security */
+"lock-now":()=>lockScreen(),
+"audit-view":()=>auditView(),
+"audit-csv":()=>download("audit-"+today()+".csv",csv([["الوقت","المستخدم","العملية","التفاصيل"],
+...(((DB&&DB.audit)||[]).map(r=>[String(r.t).replace("T"," ").slice(0,19),r.u,r.a,r.d]))]),"text/csv;charset=utf-8"),
+/* member settle */
+"member-settle":()=>settleForm(id),
 "worksheet":()=>worksheetDoc(id),"worksheet-run":()=>worksheetDoc($("#wsP").value),
 /* logs */
 "log-new":()=>logForm(null),"log-edit":()=>logForm(byId(DB.logs,id)),
@@ -1679,6 +2067,13 @@ const paid=inv.reduce((s,i)=>s+invStatus(i).paid,0);return [c.name,c.phone,c.ema
 ...DB.projects.map(p=>{const c=teamCostOfProject(p.id);return [p.title,clientName(p.clientId),p.status,p.start,p.end,p.amount,c,Number(p.amount||0)-c];})]),"text/csv;charset=utf-8"),
 "csv-team":()=>download("team.csv",csv([["العضو","العمل","نظام الأجر","المستحق","المستلم","الخصومات","المتبقي له"],
 ...DB.team.map(m=>{const c=memberCalc(m);return [m.name,m.job,m.payType,c.earned,c.paidOut,c.ded,c.due];})]),"text/csv;charset=utf-8"),
+"csv-expenses":()=>download("expenses.csv",csv([["رقم السند","التاريخ","التصنيف","الجهة","المشروع","الطريقة","المبلغ","ملاحظات"],
+...expList().map(x=>[x.no,x.date,x.cat,x.vendor,x.projectId?projectTitle(x.projectId):"عام",x.method,x.amount,x.notes])]),"text/csv;charset=utf-8"),
+"csv-cash":()=>download("cash.csv",csv([["التاريخ","البيان","النوع","وارد","صادر"],
+...[...DB.payments.map(x=>[x.date,"وصل "+(x.no||"")+" — "+clientName(paymentClient(x)),"وارد",x.amount,""]),
+...expList().map(x=>[x.date,"سند صرف "+(x.no||"")+" — "+(x.cat||""),"صادر","",x.amount]),
+...DB.payroll.filter(x=>["دفعة","سلفة"].includes(x.type)).map(x=>[x.date,x.type+" — "+memberName(x.memberId),"صادر","",x.amount])
+].sort((a,b)=>a[0]<b[0]?-1:1)]),"text/csv;charset=utf-8"),
 /* backup */
 "backup":()=>download("backup-"+(TENANT?TENANT.name:"data")+"-"+today()+".json",JSON.stringify({tenant:TENANT,data:DB},null,2),"application/json"),
 "backup-text":()=>textDump("نسخة هذا الحساب",JSON.stringify({tenant:TENANT,data:DB})),
@@ -1803,7 +2198,7 @@ try{await netDeleteTenant(id);render();toast("تم الحذف");}catch(e){toast(
 {role:"محاسب"},async v=>{
 try{const c=await netInvite(id||(TENANT&&TENANT.id),v.role,v.email,v.name);
 openModal("كود الدعوة","<div class='panel' style='box-shadow:none'><div class='panel-b' style='line-height:2.2'>الكود: <span class='code'>"+esc(c)+"</span><br>الصلاحية: <b>"+esc(v.role)+"</b></div></div>"+
-"<p style='color:var(--muted);font-size:13px'>يُستعمل مرة واحدة: ينشئ الشخص حساباً ببريده ثم يدخل الكود.</p>","<button class='btn p' data-close='1'>تم</button>");
+"<p style='color:var(--muted);font-size:13px'>يُستعمل مرة واحدة وصلاحيته ١٤ يوماً: ينشئ الشخص حساباً ببريده ثم يدخل الكود.</p>","<button class='btn p' data-close='1'>تم</button>");
 }catch(e){toast(errText(e));}}),
 "user-new":()=>{const btn=document.createElement("span");F["tenant-invite"]();},
 "sync-now":async()=>{try{await netPull(TENANT.id);render();toast("تمت المزامنة");}catch(e){toast("تعذرت المزامنة");}},
@@ -1844,6 +2239,9 @@ if(e.target.id==="q"){const pos=e.target.selectionStart;state.q=e.target.value;r
 const q=$("#q");if(q){q.focus();try{q.setSelectionRange(pos,pos);}catch(_){}}}
 if(e.target.id==="mSel"){state.month=e.target.value;render();}
 if(e.target.id==="subMonth"){state.subMonth=e.target.value;render();}
+if(e.target.id==="expCat"){state.expCat=e.target.value;render();}
+if(e.target.id==="expMonth"){state.expMonth=e.target.value;render();}
+if(e.target.id==="cashMonth"){state.cashMonth=e.target.value;render();}
 });
 $("#themeBtn").onclick=()=>{
 const cur=document.documentElement.getAttribute("data-theme");
@@ -1898,6 +2296,12 @@ d.payments=[
 {id:uid(),invoiceId:i1.id,no:"REC-2026-001",date:dm(-38),amount:4000000,method:"تحويل مصرفي",notes:""},
 {id:uid(),invoiceId:i1.id,no:"REC-2026-002",date:dm(-12),amount:3500000,method:"نقداً",notes:""},
 {id:uid(),invoiceId:i2.id,no:"REC-2026-003",date:dm(-15),amount:1000000,method:"نقداً",notes:"دفعة جزئية"}
+];
+d.expenses=[
+{id:uid(),no:"EXP-2026-001",date:dm(-25),cat:"مواد وشراء",vendor:"معرض النهرين للمواد",method:"نقداً",projectId:p1.id,amount:850000,notes:"صبغ وإكساء"},
+{id:uid(),no:"EXP-2026-002",date:dm(-14),cat:"أجور نقل",vendor:"نقليات أبو أحمد",method:"نقداً",projectId:p2.id,amount:120000,notes:"نقل ألواح الجبس"},
+{id:uid(),no:"EXP-2026-003",date:dm(-7),cat:"إيجار",vendor:"صاحب المكتب",method:"تحويل مصرفي",projectId:"",amount:500000,notes:"إيجار المكتب الشهري"},
+{id:uid(),no:"EXP-2026-004",date:dm(-3),cat:"اتصالات وإنترنت",vendor:"مزود الإنترنت",method:"نقداً",projectId:"",amount:75000,notes:""}
 ];
 d.settings.company=t.name;d.settings.demo=true;
 }
