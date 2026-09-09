@@ -107,10 +107,10 @@ radial-gradient(120% 90% at 80% 0%, color-mix(in srgb, var(--brand) 10%, transpa
 .btn.gh:hover{background:var(--surf2);color:var(--ink)}
 .btn.dg{color:var(--danger)}
 .btn.wide{width:100%;justify-content:center}
-.field input,.field select,.field textarea,.search input{width:100%;background:var(--surf);border:1px solid var(--line);border-radius:9px;padding:8px 11px;font-size:14px}
+.field input,.field select,.field textarea,.search input,.wrow input{width:100%;background:var(--surf);border:1px solid var(--line);border-radius:9px;padding:8px 11px;font-size:14px}
 .field input[type=color]{padding:3px;height:40px}
 .field textarea{min-height:74px;resize:vertical}
-.field input:focus,.field select:focus,.field textarea:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.field input:focus,.field select:focus,.field textarea:focus,.wrow input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
 .field label{display:block;font-size:12.5px;color:var(--ink2);margin-bottom:5px;font-weight:500}
 .field .hint{font-size:11.5px;color:var(--muted);margin-top:4px}
 .grid2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
@@ -165,6 +165,23 @@ background:radial-gradient(120% 90% at 80% 0%, color-mix(in srgb, var(--brand) 1
 td.n{font-variant-numeric:tabular-nums;white-space:nowrap}
 td .t2{color:var(--muted);font-size:12.5px}
 .rowact{display:flex;gap:4px;justify-content:flex-end;flex-wrap:wrap}
+.lnk{cursor:pointer;border-bottom:1px dashed var(--line)}
+.lnk:hover{color:var(--accent);border-bottom-color:var(--accent)}
+.mhead{display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap}
+.av.big{width:56px;height:56px;font-size:19px}
+.mh-info{flex:1;min-width:200px}
+.mh-info b{font-family:var(--f-disp);font-size:19px;display:block}
+.mh-act{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.mproj{border-top:1px solid var(--line)}
+.mproj:first-of-type{border-top:0}
+.mproj-h{display:flex;gap:10px;align-items:center;padding:12px 18px;background:var(--surf2);flex-wrap:wrap}
+.mproj-h b{font-size:14.5px}
+.mproj-h .t2{color:var(--muted);font-size:12.5px}
+.mproj-h .grow{flex:1}
+.wlist{display:flex;flex-direction:column;gap:8px}
+.wrow{display:grid;grid-template-columns:1fr 110px 130px auto;gap:8px;align-items:center}
+.wrow input{width:100%}
+@media(max-width:620px){.wrow{grid-template-columns:1fr 1fr;}.wrow .wdel{grid-column:span 2}}
 .rowact .btn{white-space:nowrap}
 .who b{white-space:nowrap}
 .empty{padding:40px 18px;text-align:center;color:var(--muted)}
@@ -410,6 +427,47 @@ return prefix+"-"+y+"-"+String(n).padStart(3,"0");
 const PAYTYPES=["راتب شهري","بالقطعة","بالساعة"];
 function memberPieces(id){return DB.pieces.filter(p=>p.memberId===id);}
 function memberHours(id){return DB.logs.filter(l=>l.memberId===id);}
+/* --- بطاقة أعمال العضو وأسعارها --- */
+const memberWorks=m=>((m&&m.works)||[]);
+function workOf(m,wid){return memberWorks(m).find(w=>w.id===wid)||null;}
+function workName(m,x){
+const w=workOf(m,x.workId);
+return (w&&w.name)||x.workName||x.note||"عمل";
+}
+function memberWorkOpts(m){
+return memberWorks(m).map(w=>({v:w.id,t:w.name+" — "+num(w.rate)+" / "+(w.unit||"وحدة")}));
+}
+/* أعمال العضو مجمّعة حسب المشروع */
+function memberByProject(id){
+const m=byId(DB.team,id)||{};
+const map={};
+const touch=pid=>{const k=pid||"";if(!map[k])map[k]={pid:k,pieces:0,qty:0,pieceVal:0,hours:0,hourVal:0,items:[]};return map[k];};
+memberPieces(id).forEach(x=>{
+const g=touch(x.projectId),v=Number(x.qty||0)*Number(x.rate||0);
+g.pieces++;g.qty+=Number(x.qty||0);g.pieceVal+=v;
+g.items.push({kind:"قطعة",date:x.date,label:workName(m,x),qty:Number(x.qty||0),unit:x.unit||"",rate:Number(x.rate||0),val:v,note:x.note||"",id:x.id});
+});
+memberHours(id).forEach(l=>{
+const g=touch(l.projectId),r=Number(m.hourRate||0),v=Number(l.hours||0)*r;
+g.hours+=Number(l.hours||0);g.hourVal+=v;
+g.items.push({kind:"ساعات",date:l.date,label:l.desc||"عمل بالساعة",qty:Number(l.hours||0),unit:"ساعة",rate:r,val:v,note:"",id:l.id});
+});
+const list=Object.values(map).map(g=>{g.total=g.pieceVal+g.hourVal;g.items.sort((a,b)=>a.date<b.date?1:-1);return g;});
+list.sort((a,b)=>b.total-a.total);
+return list;
+}
+/* ملخص أنواع الأعمال المنجزة */
+function memberWorkSummary(id){
+const m=byId(DB.team,id)||{};
+const rows=memberWorks(m).map(w=>({w,qty:0,val:0,n:0}));
+const other={w:{id:"",name:"أعمال أخرى",unit:"",rate:0},qty:0,val:0,n:0};
+memberPieces(id).forEach(x=>{
+const r=rows.find(r=>r.w.id===x.workId)||other;
+r.qty+=Number(x.qty||0);r.val+=Number(x.qty||0)*Number(x.rate||0);r.n++;
+});
+if(other.n)rows.push(other);
+return rows;
+}
 function memberCalc(m){
 const tx=DB.payroll.filter(x=>x.memberId===m.id);
 const sum=t=>tx.filter(x=>x.type===t).reduce((s,x)=>s+Number(x.amount||0),0);
@@ -544,7 +602,7 @@ const c=memberCalc(m);
 const rows=[
 ...DB.payroll.filter(x=>x.memberId===id).map(x=>({d:x.date,t:x.type+(x.month?" — "+fmonth(x.month):"")+(x.note?" — "+x.note:""),
 cr:["راتب مستحق","مكافأة"].includes(x.type)?Number(x.amount||0):0, dr:["دفعة","سلفة","خصم"].includes(x.type)?Number(x.amount||0):0})),
-...memberPieces(id).map(p=>({d:p.date,t:"قطعة — "+projectTitle(p.projectId)+" ("+num(p.qty)+" "+(p.unit||"وحدة")+" × "+num(p.rate)+")",cr:Number(p.qty||0)*Number(p.rate||0),dr:0})),
+...memberPieces(id).map(p=>({d:p.date,t:workName(m,p)+" — "+projectTitle(p.projectId)+" ("+num(p.qty)+" "+(p.unit||"وحدة")+" × "+num(p.rate)+")",cr:Number(p.qty||0)*Number(p.rate||0),dr:0})),
 ...(m.payType==="بالساعة"?memberHours(id).map(l=>({d:l.date,t:"ساعات — "+projectTitle(l.projectId)+" ("+num(l.hours)+" ساعة)",cr:Number(l.hours||0)*Number(m.hourRate||0),dr:0})):[])
 ].sort((a,b)=>a.d<b.d?-1:1);
 let bal=0;
@@ -554,8 +612,21 @@ h+="<table><thead><tr><th>التاريخ</th><th>البيان</th><th style='tex
 if(!rows.length)h+="<tr><td colspan='5' style='text-align:center;color:#6b7a76'>لا توجد حركات</td></tr>";
 rows.forEach(r=>{bal+=r.cr-r.dr;h+="<tr><td>"+fdate(r.d)+"</td><td>"+esc(r.t)+"</td><td class='n' style='text-align:end'>"+(r.cr?num(r.cr):"—")+
 "</td><td class='n' style='text-align:end'>"+(r.dr?num(r.dr):"—")+"</td><td class='n' style='text-align:end'>"+num(bal)+"</td></tr>";});
-h+="</tbody></table><div class='tot'><table><tr><td>إجمالي المستحق</td><td class='n' style='text-align:end'>"+money(c.earned)+"</td></tr>"+
-"<tr><td>الواصل (دفعات وسلف)</td><td class='n' style='text-align:end'>"+money(c.paidOut)+"</td></tr>"+
+h+="</tbody></table>";
+const wk=memberWorkSummary(id).filter(r=>r.n>0);
+if(wk.length)h+="<div style='margin-top:16px'><b style='font-size:13px'>أنواع الأعمال المنجزة</b><table style='margin-top:6px'><thead><tr><th>العمل</th><th style='text-align:end'>السعر</th><th style='text-align:end'>الكمية</th><th style='text-align:end'>القيمة</th></tr></thead><tbody>"+
+wk.map(r=>"<tr><td>"+esc(r.w.name)+"</td><td class='n' style='text-align:end'>"+(r.w.rate?money(r.w.rate)+" / "+esc(r.w.unit||"وحدة"):"—")+
+"</td><td class='n' style='text-align:end'>"+num(r.qty)+" "+esc(r.w.unit||"")+"</td><td class='n' style='text-align:end'>"+money(r.val)+"</td></tr>").join("")+"</tbody></table></div>";
+const byp=memberByProject(id).filter(g=>g.total>0);
+if(byp.length)h+="<div style='margin-top:16px'><b style='font-size:13px'>الأعمال حسب المشروع</b><table style='margin-top:6px'><thead><tr><th>المشروع</th><th style='text-align:end'>عدد الأعمال</th><th style='text-align:end'>الساعات</th><th style='text-align:end'>القيمة</th></tr></thead><tbody>"+
+byp.map(g=>"<tr><td>"+esc(g.pid?projectTitle(g.pid):"بدون مشروع")+"</td><td class='n' style='text-align:end'>"+g.pieces+
+"</td><td class='n' style='text-align:end'>"+(g.hours?num(g.hours):"—")+"</td><td class='n' style='text-align:end'>"+money(g.total)+"</td></tr>").join("")+
+"<tr><td><b>المجموع</b></td><td class='n' style='text-align:end'><b>"+byp.reduce((s,g)=>s+g.pieces,0)+"</b></td>"+
+"<td class='n' style='text-align:end'><b>"+num(byp.reduce((s,g)=>s+g.hours,0))+"</b></td>"+
+"<td class='n' style='text-align:end'><b>"+money(byp.reduce((s,g)=>s+g.total,0))+"</b></td></tr>"+
+"</tbody></table></div>";
+h+="<div class='tot'><table><tr><td>إجمالي المستحق (يطلب الشركة)</td><td class='n' style='text-align:end'>"+money(c.earned)+"</td></tr>"+
+"<tr><td>الواصل (المستلم من الشركة)</td><td class='n' style='text-align:end'>"+money(c.paidOut)+"</td></tr>"+
 "<tr><td>الخصومات</td><td class='n' style='text-align:end'>"+money(c.ded)+"</td></tr>"+
 "<tr><td class='big'>الباقي له</td><td class='n big' style='text-align:end'>"+money(c.due)+"</td></tr></table></div>";
 h+="<div class='sign'><div>توقيع العضو</div><div>توقيع المحاسب</div></div>";
@@ -789,6 +860,7 @@ clients:{t:"العملاء",s:"بيانات العملاء وأرصدتهم"},
 projects:{t:"المشاريع",s:"التنفيذ والمواعيد والكلفة والربح"},
 logs:{t:"سجل الأوقات",s:"ساعات العمل على كل مشروع"},
 team:{t:"الفريق",s:"الأعضاء وأنظمة أجورهم ومستحقاتهم"},
+member:{t:"ملف الموظف",s:"أعماله ومشاريعه وما يطلبه وما استلمه"},
 payroll:{t:"الرواتب والمستحقات",s:"احتساب الرواتب والقطعة والسلف والدفعات"},
 invoices:{t:"الفواتير",s:"الفواتير والمستحقات وتواريخ التسديد"},
 payments:{t:"الدفعات والوصولات",s:"المبالغ الواصلة ووصولات الاستلام"},
@@ -827,7 +899,11 @@ return "<button class='nav' data-go='"+id+"' aria-current='"+(state.page===id)+"
 function render(){
 if(!PAGES[state.page])state.page=(ROOT.session.kind==="owner"&&!ROOT.session.tenantId)?"accounts":"dash";
 const p=PAGES[state.page];
-$("#pageTitle").textContent=p.t;$("#pageSub").textContent=p.s;
+let pt=p.t,ps=p.s;
+if(state.page==="member"){const mm=byId(DB.team,state.memberId);
+if(!mm){state.page="team";return render();}
+pt=mm.name;ps=(mm.job?mm.job+" — ":"")+(mm.payType||"")+(mm.active===false?" (موقوف)":"");}
+$("#pageTitle").textContent=pt;$("#pageSub").textContent=ps;
 buildNav();
 const inTenant=!!(DB&&TENANT);
 const brandBox=document.querySelector(".brand");
@@ -859,6 +935,7 @@ clients:"<button class='btn p' data-act='client-new'>+ عميل</button>",
 projects:"<button class='btn p' data-act='project-new'>+ مشروع</button>",
 logs:"<button class='btn p' data-act='log-new'>+ تسجيل وقت</button>",
 team:"<button class='btn p' data-act='member-new'>+ عضو فريق</button>",
+member:"<button class='btn' data-act='mwork-new'>+ نوع عمل</button><button class='btn' data-act='mpiece-new'>+ تسجيل عمل</button><button class='btn p' data-act='mpay'>+ دفعة</button>",
 payroll:"<button class='btn' data-act='piece-new'>+ عمل بالقطعة</button><button class='btn p' data-act='ptx-new'>+ حركة (دفعة/سلفة/خصم)</button>",
 invoices:"<button class='btn p' data-act='invoice-new'>+ فاتورة</button>",
 payments:"<button class='btn' data-act='project-pay'>+ تسديد على مشروع</button><button class='btn p' data-act='payment-new'>+ دفعة على فاتورة</button>",
@@ -868,7 +945,7 @@ dash:"<button class='btn' data-act='expense-new'>+ مصروف</button><button cl
 accounts:"<button class='btn p' data-act='tenant-new'>+ حساب جديد</button>"
 };
 $("#pageActions").innerHTML=canEdit()?(A[state.page]||""):"";
-const V={dash:vDash,clients:vClients,projects:vProjects,logs:vLogs,team:vTeam,payroll:vPayroll,invoices:vInvoices,
+const V={dash:vDash,clients:vClients,projects:vProjects,logs:vLogs,team:vTeam,member:vMember,payroll:vPayroll,invoices:vInvoices,
 payments:vPayments,expenses:vExpenses,cash:vCash,reports:vReports,settings:vSettings,accounts:vAccounts,ownerset:vOwnerSet,subs:vSubs,mysub:vMySub};
 $("#view").innerHTML=V[state.page]();
 if(state.page==="dash")bindChart();
@@ -992,18 +1069,105 @@ h+=rows.length?"<div class='tw'><table><thead><tr><th>العضو</th><th>نظا�
 rows.map(m=>{const c=memberCalc(m);
 const basis=m.payType==="راتب شهري"?money(m.salary)+" / شهر":m.payType==="بالساعة"?money(m.hourRate)+" / ساعة":money(m.pieceRate)+" / "+(m.pieceUnit||"قطعة");
 const pc=c.earned>0?Math.max(0,Math.min(100,Math.round(c.paidOut/c.earned*100))):0;
-return "<tr><td><div class='who'><span class='av'>"+esc(initials(m.name))+"</span><span><b>"+esc(m.name)+"</b>"+
+return "<tr><td><div class='who'><span class='av'>"+esc(initials(m.name))+"</span><span><b class='lnk' data-act='member-open' data-id='"+m.id+"'>"+esc(m.name)+"</b>"+
 (m.job?"<div class='t2'>"+esc(m.job)+"</div>":"")+"</span></div></td>"+
 "<td><span class='pill p-mut np'>"+esc(m.payType||"—")+"</span>"+(m.active===false?" <span class='pill p-dg'>موقوف</span>":"")+"</td>"+
 "<td class='n'>"+basis+"</td><td class='n'>"+money(c.earned)+"</td><td class='n'>"+money(c.paidOut)+"</td><td class='n'>"+money(c.ded)+"</td>"+
 "<td class='n'><span class='pill "+(c.due>0?"p-warn":c.due<0?"p-dg":"p-ok")+"'>"+money(c.due)+"</span></td>"+
 "<td><div class='row' style='gap:8px'><span class='bar'><i style='width:"+pc+"%'></i></span><span class='t2 num'>"+pc+"%</span></div></td>"+
-"<td><div class='rowact'>"+(canEdit()&&c.due>0?act("member-settle",m.id,"تسديد"):"")+
+"<td><div class='rowact'>"+act("member-open",m.id,"الملف")+(canEdit()&&c.due>0?act("member-settle",m.id,"تسديد","gh"):"")+
 act("member-statement",m.id,"كشف","gh")+(canEdit()?act("member-pay",m.id,"حركة","gh"):"")+
 (canEdit()?act("member-edit",m.id,"تعديل","gh"):"")+(canAdmin()?act("member-del",m.id,"حذف","gh dg"):"")+"</div></td></tr>";}).join("")+
 "<tr class='sum'><td colspan='3'><b>المجموع</b></td><td class='n'><b>"+money(tot.e)+"</b></td><td class='n'><b>"+money(tot.p)+"</b></td>"+
 "<td class='n'></td><td class='n'><b>"+money(tot.d)+"</b></td><td colspan='2'></td></tr>"+
 "</tbody></table></div>":"<div class='empty'><b>لا يوجد أعضاء</b>أضف أعضاء الفريق وحدّد نظام أجر كل واحد: راتب شهري، أو بالقطعة، أو بالساعة.</div>";
+return h+"</div>";
+}
+/* ---------- ملف الموظف ---------- */
+function vMember(){
+const m=byId(DB.team,state.memberId);if(!m)return "";
+const c=memberCalc(m),cu=DB.settings.currency;
+const works=memberWorks(m), wsum=memberWorkSummary(m.id), byp=memberByProject(m.id);
+const nProj=byp.filter(g=>g.pid&&g.total>0).length;
+const nItems=byp.reduce((s,g)=>s+g.items.length,0);
+const basis=m.payType==="راتب شهري"?money(m.salary)+" / شهر":m.payType==="بالساعة"?money(m.hourRate)+" / ساعة":
+(works.length?works.length+" نوع عمل":money(m.pieceRate)+" / "+(m.pieceUnit||"قطعة"));
+let h="<div class='panel'><div class='panel-b'><div class='mhead'>"+
+"<span class='av big'>"+esc(initials(m.name))+"</span>"+
+"<div class='mh-info'><b>"+esc(m.name)+"</b>"+
+"<div class='t2'>"+esc(m.job||"—")+(m.phone?" · "+esc(m.phone):"")+(m.start?" · منذ "+fdate(m.start):"")+"</div>"+
+"<div class='row' style='margin-top:6px'><span class='pill p-mut np'>"+esc(m.payType||"—")+"</span>"+
+"<span class='pill p-acc np'>"+basis+"</span>"+
+(m.active===false?"<span class='pill p-dg'>موقوف</span>":"<span class='pill p-ok'>فعّال</span>")+"</div></div>"+
+"<div class='mh-act'><button class='btn sm' data-act='member-statement' data-id='"+m.id+"'>طباعة كشف الحساب</button>"+
+(canEdit()?"<button class='btn sm gh' data-act='member-edit' data-id='"+m.id+"'>تعديل البيانات</button>":"")+
+"<button class='btn sm gh' data-go='team'>رجوع للفريق</button></div></div>"+
+(m.notes?"<div class='hint' style='margin-top:10px'>"+esc(m.notes)+"</div>":"")+"</div></div>";
+h+="<div class='strip'>"+
+"<div class='stat acc'><span class='k'>يطلب الشركة (المستحق)</span><span class='v'>"+num(c.earned)+"<small>"+cu+"</small></span></div>"+
+"<div class='stat ok'><span class='k'>استلم من الشركة</span><span class='v'>"+num(c.paidOut)+"<small>"+cu+"</small></span></div>"+
+"<div class='stat "+(c.due>0?"dg":"ok")+"'><span class='k'>الباقي له</span><span class='v'>"+num(c.due)+"<small>"+cu+"</small></span></div>"+
+"<div class='stat'><span class='k'>عدد المشاريع</span><span class='v'>"+nProj+"</span></div>"+
+"<div class='stat'><span class='k'>عدد الأعمال المسجّلة</span><span class='v'>"+nItems+"</span></div></div>";
+/* --- أنواع الأعمال وأسعارها --- */
+h+="<div class='panel'><div class='panel-h'><h2>أنواع الأعمال وسعر كل عمل</h2><span class='grow'></span>"+
+(canEdit()?"<button class='btn sm p' data-act='mwork-new'>+ نوع عمل</button>":"")+"</div>";
+const wrows=wsum.filter(r=>r.w.id||r.n);
+h+=(works.length||wrows.length)?"<div class='tw'><table><thead><tr><th>العمل</th><th>الوحدة</th><th>السعر</th><th>المنجز</th><th>القيمة</th><th></th></tr></thead><tbody>"+
+wsum.map(r=>"<tr><td><b>"+esc(r.w.name)+"</b>"+(r.w.note?"<div class='t2'>"+esc(r.w.note)+"</div>":"")+"</td>"+
+"<td>"+esc(r.w.unit||"—")+"</td><td class='n'>"+(r.w.rate?money(r.w.rate):"—")+"</td>"+
+"<td class='n'>"+(r.qty?num(r.qty)+" "+esc(r.w.unit||""):"—")+"</td><td class='n'>"+money(r.val)+"</td>"+
+"<td><div class='rowact'>"+(r.w.id&&canEdit()?act("mpiece-for",r.w.id,"تسجيل عمل")+act("mwork-edit",r.w.id,"تعديل","gh")+act("mwork-del",r.w.id,"حذف","gh dg"):"")+"</div></td></tr>").join("")+
+"<tr class='sum'><td colspan='4'><b>مجموع الأعمال بالقطعة</b></td><td class='n'><b>"+money(c.pieces)+"</b></td><td></td></tr>"+
+"</tbody></table></div>"
+:"<div class='empty'><b>لم تُحدَّد أنواع أعماله بعد</b>أضف كل نوع عمل يقوم به وسعره (باب ٤٥ ألف، متر إكساء ١٢ ألف…) ليُحتسب مستحقه تلقائياً.</div>";
+h+="</div>";
+/* --- الأعمال حسب المشروع --- */
+h+="<div class='panel'><div class='panel-h'><h2>أعماله في المشاريع</h2><span class='grow'></span>"+
+(canEdit()?"<button class='btn sm' data-act='mpiece-new'>+ تسجيل عمل</button>":"")+"</div>";
+const bypa=byp.filter(g=>g.items.length);
+if(!bypa.length)h+="<div class='empty'><b>لا توجد أعمال مسجّلة</b>سجّل أول عمل ليظهر هنا موزعاً على المشاريع.</div>";
+else bypa.forEach(g=>{
+h+="<div class='mproj'><div class='mproj-h'><b>"+esc(g.pid?projectTitle(g.pid):"أعمال بدون مشروع")+"</b>"+
+(g.pid?"<span class='t2'>"+esc(clientName((byId(DB.projects,g.pid)||{}).clientId))+"</span>":"")+
+"<span class='grow'></span>"+
+(g.pieces?"<span class='pill p-mut np'>"+g.pieces+" عمل</span>":"")+
+(g.hours?"<span class='pill p-mut np'>"+num(g.hours)+" ساعة</span>":"")+
+"<span class='pill p-acc np'>"+money(g.total)+"</span></div>"+
+"<div class='tw'><table><thead><tr><th>التاريخ</th><th>العمل</th><th>النوع</th><th>الكمية</th><th>السعر</th><th>القيمة</th><th></th></tr></thead><tbody>"+
+g.items.map(it=>"<tr><td class='n'>"+fdate(it.date)+"</td><td>"+esc(it.label)+(it.note?"<div class='t2'>"+esc(it.note)+"</div>":"")+"</td>"+
+"<td><span class='pill "+(it.kind==="قطعة"?"p-mut":"p-acc")+" np'>"+it.kind+"</span></td>"+
+"<td class='n'>"+num(it.qty)+" "+esc(it.unit||"")+"</td><td class='n'>"+(it.rate?money(it.rate):"—")+"</td>"+
+"<td class='n'>"+money(it.val)+"</td>"+
+"<td><div class='rowact'>"+(canEdit()&&it.kind==="قطعة"?act("piece-edit",it.id,"تعديل","gh")+act("piece-del",it.id,"حذف","gh dg"):"")+
+(canEdit()&&it.kind==="ساعات"?act("log-edit",it.id,"تعديل","gh"):"")+"</div></td></tr>").join("")+
+"</tbody></table></div></div>";
+});
+h+="</div>";
+/* --- الحساب المالي --- */
+const tx=DB.payroll.filter(x=>x.memberId===m.id).sort((a,b)=>a.date<b.date?1:-1);
+h+="<div class='panel'><div class='panel-h'><h2>الحساب المالي</h2><span class='grow'></span>"+
+(canEdit()&&c.due>0?"<button class='btn sm p' data-act='member-settle' data-id='"+m.id+"'>تسديد الباقي ("+money(c.due)+")</button>":"")+
+(canEdit()?"<button class='btn sm' data-act='mpay'>+ حركة</button>":"")+"</div>";
+h+="<div class='tw'><table><tbody>"+
+"<tr><td>راتب مستحق</td><td class='n'>"+money(c.salary)+"</td></tr>"+
+"<tr><td>أعمال بالقطعة</td><td class='n'>"+money(c.pieces)+"</td></tr>"+
+"<tr><td>ساعات عمل ("+num(c.hoursH)+" ساعة)</td><td class='n'>"+money(c.hours)+"</td></tr>"+
+"<tr><td>مكافآت</td><td class='n'>"+money(c.bonus)+"</td></tr>"+
+"<tr class='sum'><td><b>إجمالي ما يطلبه من الشركة</b></td><td class='n'><b>"+money(c.earned)+"</b></td></tr>"+
+"<tr><td>ناقص: دفعات مستلمة</td><td class='n'>"+money(c.pay)+"</td></tr>"+
+"<tr><td>ناقص: سلف</td><td class='n'>"+money(c.adv)+"</td></tr>"+
+"<tr><td>ناقص: خصومات</td><td class='n'>"+money(c.ded)+"</td></tr>"+
+"<tr class='sum'><td><b>الباقي له</b></td><td class='n'><b>"+money(c.due)+"</b></td></tr>"+
+"</tbody></table></div>";
+h+=tx.length?"<div class='tw'><table><thead><tr><th>التاريخ</th><th>النوع</th><th>البيان</th><th>المبلغ</th><th>الوصل</th><th></th></tr></thead><tbody>"+
+tx.map(x=>{const cls={"راتب مستحق":"p-acc","مكافأة":"p-ok","دفعة":"p-mut","سلفة":"p-warn","خصم":"p-dg"}[x.type]||"p-mut";
+return "<tr><td class='n'>"+fdate(x.date)+"</td><td><span class='pill "+cls+"'>"+esc(x.type)+"</span></td>"+
+"<td>"+esc(x.month?fmonth(x.month):(x.projectId?projectTitle(x.projectId):(x.note||"—")))+"</td>"+
+"<td class='n'>"+money(x.amount)+"</td><td>"+esc(x.no||"—")+"</td>"+
+"<td><div class='rowact'>"+(["دفعة","سلفة"].includes(x.type)?act("ptx-receipt",x.id,"وصل","gh"):"")+
+(canEdit()?act("ptx-edit",x.id,"تعديل","gh")+act("ptx-del",x.id,"حذف","gh dg"):"")+"</div></td></tr>";}).join("")+
+"</tbody></table></div>":"<div class='empty'><b>لا توجد حركات مالية</b>سجّل دفعة أو سلفة أو خصماً.</div>";
 return h+"</div>";
 }
 function vPayroll(){
@@ -1804,31 +1968,118 @@ save();render();toast("تم التسديد");setTimeout(()=>payrollReceiptDoc(re
 });
 }
 function memberForm(m){
-openForm(m?"تعديل عضو":"عضو فريق جديد",[
-{name:"name",label:"الاسم",req:true},{name:"job",label:"العمل / المهنة",ph:"نجار، مهندس، عامل…"},
-{name:"phone",label:"الهاتف",type:"tel"},
-{name:"payType",label:"نظام الأجر",type:"select",opts:PAYTYPES.map(x=>({v:x,t:x})),req:true},
-{name:"salary",label:"الراتب الشهري",type:"number",hint:"يُستخدم مع «راتب شهري»"},
-{name:"hourRate",label:"أجر الساعة",type:"number",hint:"يُستخدم مع «بالساعة»"},
-{name:"pieceRate",label:"سعر القطعة/الوحدة",type:"number",hint:"يُستخدم مع «بالقطعة»"},
-{name:"pieceUnit",label:"اسم الوحدة",ph:"متر، قطعة، باب…"},
-{name:"start",label:"تاريخ المباشرة",type:"date"},
-{name:"active",label:"الحالة",type:"select",opts:[{v:"1",t:"فعّال"},{v:"0",t:"موقوف"}]},
-{name:"notes",label:"ملاحظات",type:"textarea",span:true}
-],m?Object.assign({},m,{active:m.active===false?"0":"1"}):{payType:"راتب شهري",start:today(),active:"1"},
-v=>{v.active=v.active!=="0";if(m)Object.assign(m,v);else DB.team.push(Object.assign({id:uid()},v));save();render();toast("تم الحفظ");});
+const cur=m?Object.assign({},m):{payType:"بالقطعة",start:today(),active:true,works:[]};
+let works=(cur.works||[]).map(w=>Object.assign({},w));
+if(!m&&!works.length)works=[{id:uid(),name:"",unit:"قطعة",rate:0}];
+const F=(id,label,val,type,ph,hint)=>"<div class='field'><label>"+esc(label)+"</label><input id='"+id+"' type='"+(type||"text")+"' value='"+esc(val==null?"":val)+"' placeholder='"+esc(ph||"")+"'"+(type==="number"?" step='any' inputmode='decimal'":"")+">"+(hint?"<div class='hint'>"+esc(hint)+"</div>":"")+"</div>";
+const sel=(id,label,val,opts)=>"<div class='field'><label>"+esc(label)+"</label><select id='"+id+"'>"+
+opts.map(o=>"<option value='"+esc(o.v)+"'"+(String(o.v)===String(val)?" selected":"")+">"+esc(o.t)+"</option>").join("")+"</select></div>";
+function worksHTML(){
+return "<div class='wlist'>"+(works.length?works.map((w,i)=>
+"<div class='wrow' data-i='"+i+"'>"+
+"<input class='wn' placeholder='اسم العمل (باب، متر إكساء، لوحة…)' value='"+esc(w.name||"")+"'>"+
+"<input class='wu' placeholder='الوحدة' value='"+esc(w.unit||"")+"'>"+
+"<input class='wr' type='number' step='any' inputmode='decimal' placeholder='السعر' value='"+esc(w.rate==null?"":w.rate)+"'>"+
+"<button type='button' class='btn sm gh dg wdel' data-i='"+i+"'>حذف</button></div>").join("")
+:"<div class='hint'>لم تُضف أنواع أعمال بعد — اضغط «إضافة نوع عمل».</div>")+"</div>";
 }
-function pieceForm(x){
+const body="<form id='frm' class='grid2'>"+
+F("f_name","الاسم",cur.name,"text","الاسم الكامل")+
+F("f_job","العمل / المهنة",cur.job,"text","نجار، مهندس، عامل…")+
+F("f_phone","الهاتف",cur.phone,"tel")+
+sel("f_payType","نظام الأجر",cur.payType,PAYTYPES.map(x=>({v:x,t:x})))+
+F("f_salary","الراتب الشهري",cur.salary,"number","","يُستخدم مع «راتب شهري»")+
+F("f_hourRate","أجر الساعة",cur.hourRate,"number","","يُستخدم مع «بالساعة»")+
+F("f_start","تاريخ المباشرة",cur.start,"date")+
+sel("f_active","الحالة",cur.active===false?"0":"1",[{v:"1",t:"فعّال"},{v:"0",t:"موقوف"}])+
+"<div class='field full'><label>ملاحظات</label><textarea id='f_notes'>"+esc(cur.notes||"")+"</textarea></div>"+
+"<div class='field full'><label>أنواع الأعمال التي يقوم بها وسعر كل عمل</label>"+
+"<div id='worksBox'>"+worksHTML()+"</div>"+
+"<div class='row' style='margin-top:8px'><button type='button' class='btn sm' id='addWork'>+ إضافة نوع عمل</button></div>"+
+"<div class='hint'>مثال: باب / قطعة / ٤٥٠٠٠ — تظهر هذه الأعمال عند تسجيل عمل له، ويُحتسب المستحق تلقائياً.</div></div>"+
+"</form>";
+openModal(m?"تعديل عضو":"عضو فريق جديد",body,
+"<button class='btn p' id='sv'>حفظ</button><button class='btn' data-close='1'>إلغاء</button>");
+const box=()=>$("#worksBox");
+function readWorks(){
+const rows=[...box().querySelectorAll(".wrow")];
+works=rows.map((r,i)=>({id:(works[i]&&works[i].id)||uid(),
+name:r.querySelector(".wn").value.trim(),
+unit:r.querySelector(".wu").value.trim(),
+rate:Number(r.querySelector(".wr").value||0)}));
+}
+function repaint(){box().innerHTML=worksHTML();bind();}
+function bind(){
+box().querySelectorAll(".wdel").forEach(b=>b.onclick=()=>{readWorks();works.splice(Number(b.dataset.i),1);repaint();});
+}
+bind();
+$("#addWork").onclick=()=>{readWorks();works.push({id:uid(),name:"",unit:"",rate:0});repaint();
+const last=box().querySelector(".wrow:last-child .wn");if(last)last.focus();};
+$("#sv").onclick=()=>{
+const name=$("#f_name").value.trim();
+if(!name){toast("الحقل «الاسم» مطلوب");$("#f_name").focus();return;}
+readWorks();
+const clean=works.filter(w=>w.name);
+const v={name:name,job:$("#f_job").value.trim(),phone:$("#f_phone").value.trim(),
+payType:$("#f_payType").value,salary:Number($("#f_salary").value||0),
+hourRate:Number($("#f_hourRate").value||0),start:$("#f_start").value,
+active:$("#f_active").value!=="0",notes:$("#f_notes").value.trim(),works:clean};
+if(m){Object.assign(m,v);audit("تعديل عضو",name);}
+else{const rec=Object.assign({id:uid(),pieceRate:0,pieceUnit:""},v);DB.team.push(rec);audit("إضافة عضو",name);}
+closeModal();save();render();toast("تم الحفظ");
+};
+}
+function workForm(memberId,workId){
+const m=byId(DB.team,memberId);if(!m)return;
+m.works=m.works||[];
+const w=workId?workOf(m,workId):null;
+openForm(w?"تعديل نوع عمل":"نوع عمل جديد — "+m.name,[
+{name:"name",label:"اسم العمل",req:true,span:true,ph:"باب، متر إكساء، لوحة إعلانية…"},
+{name:"unit",label:"الوحدة",ph:"قطعة، متر، ساعة…"},
+{name:"rate",label:"سعر الوحدة",type:"number",req:true,pos:true}
+],w||{unit:"قطعة"},v=>{
+if(w)Object.assign(w,v);else m.works.push(Object.assign({id:uid()},v));
+audit(w?"تعديل نوع عمل":"إضافة نوع عمل",m.name+" — "+v.name);
+save();render();toast("تم الحفظ");
+});
+}
+function pieceForm(x,presetMember,presetWork){
 if(!DB.team.length){toast("أضف عضو فريق أولاً");return;}
-openForm(x?"تعديل عمل بالقطعة":"تسجيل عمل بالقطعة",[
+const mid=(x&&x.memberId)||presetMember||DB.team[0].id;
+const m=byId(DB.team,mid)||{};
+const wopts=[{v:"",t:"— عمل غير مصنّف —"}].concat(memberWorkOpts(m));
+const pre=x||{date:today(),memberId:mid,workId:presetWork||"",qty:1};
+if(!x&&presetWork){const w=workOf(m,presetWork);if(w){pre.unit=w.unit;pre.rate=w.rate;}}
+openForm(x?"تعديل عمل":"تسجيل عمل — "+(m.name||""),[
 {name:"memberId",label:"العضو",type:"select",opts:memberOpts(),req:true},
+{name:"workId",label:"نوع العمل",type:"select",opts:wopts,
+hint:memberWorks(m).length?"اختيار النوع يملأ الوحدة والسعر تلقائياً":"لا توجد أنواع أعمال لهذا العضو — أضفها من ملفه"},
 {name:"projectId",label:"المشروع",type:"select",opts:[{v:"",t:"— بدون مشروع —"}].concat(projOpts())},
 {name:"date",label:"التاريخ",type:"date",req:true},
-{name:"qty",label:"الكمية المنجزة",type:"number",req:true},
+{name:"qty",label:"الكمية المنجزة",type:"number",req:true,pos:true},
 {name:"unit",label:"الوحدة",ph:"متر، قطعة…"},
-{name:"rate",label:"سعر الوحدة",type:"number",req:true},
-{name:"note",label:"البيان",span:true}
-],x||{date:today()},v=>{if(x)Object.assign(x,v);else DB.pieces.push(Object.assign({id:uid()},v));save();render();toast("تم الحفظ");});
+{name:"rate",label:"سعر الوحدة",type:"number",req:true,pos:true},
+{name:"note",label:"البيان / ملاحظات",span:true}
+],pre,v=>{
+const mm=byId(DB.team,v.memberId)||{},w=workOf(mm,v.workId);
+if(w){if(!v.unit)v.unit=w.unit;if(!v.rate)v.rate=w.rate;v.workName=w.name;}
+if(x)Object.assign(x,v);else DB.pieces.push(Object.assign({id:uid()},v));
+audit(x?"تعديل عمل":"تسجيل عمل",(mm.name||"")+" — "+num(v.qty)+" "+(v.unit||"")+" × "+num(v.rate));
+save();render();toast("تم الحفظ");
+});
+/* ملء تلقائي عند تغيير نوع العمل أو العضو */
+const frm=$("#frm");if(!frm)return;
+const fillFromWork=()=>{
+const mm=byId(DB.team,frm.elements.memberId.value)||{};
+const w=workOf(mm,frm.elements.workId.value);
+if(w){frm.elements.unit.value=w.unit||"";frm.elements.rate.value=w.rate||"";}
+};
+frm.elements.workId.addEventListener("change",fillFromWork);
+frm.elements.memberId.addEventListener("change",()=>{
+const mm=byId(DB.team,frm.elements.memberId.value)||{};
+const s=frm.elements.workId;
+s.innerHTML="<option value=''>— عمل غير مصنّف —</option>"+memberWorkOpts(mm).map(o=>"<option value='"+esc(o.v)+"'>"+esc(o.t)+"</option>").join("");
+});
 }
 const PTYPES=["دفعة","سلفة","خصم","مكافأة","راتب مستحق"];
 function ptxForm(x,presetMember,presetType){
@@ -1974,7 +2225,8 @@ const el=e.target.closest("[data-act]");if(!el)return;
 const a=el.dataset.act,id=el.dataset.id;
 const needEdit=["client-new","client-edit","project-new","project-edit","log-new","log-edit","member-new","member-edit",
 "piece-new","piece-edit","ptx-new","ptx-edit","invoice-new","invoice-edit","payment-new","payment-edit","pay-for","member-pay","accrue",
-"expense-new","expense-edit","member-settle","project-pay","project-pay-for"];
+"expense-new","expense-edit","member-settle","project-pay","project-pay-for",
+"mwork-new","mwork-edit","mpiece-new","mpiece-for","mpay"];
 if(needEdit.includes(a)&&!canEdit()){toast("صلاحيتك للعرض فقط");return;}
 const F={
 /* clients */
@@ -2029,9 +2281,21 @@ DB.expenses=expList().filter(e=>e.id!==id);save();render();toast("تم الحذ�
 "member-del":()=>askConfirm("سيتم حذف العضو مع حركاته وأعماله بالقطعة. متابعة؟",()=>{
 DB.payroll=DB.payroll.filter(x=>x.memberId!==id);DB.pieces=DB.pieces.filter(x=>x.memberId!==id);
 DB.logs.forEach(l=>{if(l.memberId===id)l.memberId="";});
-DB.team=DB.team.filter(m=>m.id!==id);save();render();toast("تم الحذف");}),
+DB.team=DB.team.filter(m=>m.id!==id);
+if(state.page==="member"&&state.memberId===id)state.page="team";
+save();render();toast("تم الحذف");}),
 "member-statement":()=>memberStatementDoc(id),
 "member-pay":()=>ptxForm(null,id,"دفعة"),
+"member-open":()=>{state.memberId=id;state.page="member";state.q="";render();},
+"mwork-new":()=>workForm(state.memberId,null),
+"mwork-edit":()=>workForm(state.memberId,id),
+"mwork-del":()=>askConfirm("حذف نوع العمل؟ الأعمال المسجّلة سابقاً تبقى كما هي.",()=>{
+const m=byId(DB.team,state.memberId);if(!m)return;
+const w=workOf(m,id);m.works=(m.works||[]).filter(x=>x.id!==id);
+audit("حذف نوع عمل",m.name+" — "+((w&&w.name)||""));save();render();toast("تم الحذف");}),
+"mpiece-new":()=>pieceForm(null,state.memberId),
+"mpiece-for":()=>pieceForm(null,state.memberId,id),
+"mpay":()=>ptxForm(null,state.memberId,"دفعة"),
 "piece-new":()=>pieceForm(null),"piece-edit":()=>pieceForm(byId(DB.pieces,id)),
 "piece-del":()=>askConfirm("حذف هذا العمل؟",()=>{DB.pieces=DB.pieces.filter(x=>x.id!==id);save();render();toast("تم الحذف");}),
 "ptx-new":()=>ptxForm(null),"ptx-edit":()=>ptxForm(byId(DB.payroll,id)),
@@ -2269,7 +2533,10 @@ const p2={id:uid(),clientId:c2.id,title:"تصميم وتنفيذ ديكور ال
 const p3={id:uid(),clientId:c3.id,title:"مخططات تنفيذية — مشروع سكني",desc:"",start:dm(-8),end:dm(30),status:"قيد التنفيذ",amount:3000000,rate:30000};
 d.projects=[p1,p2,p3];
 const m1={id:uid(),name:"علي حسن",job:"مهندس تنفيذ",phone:"0770 111 2222",payType:"راتب شهري",salary:1200000,hourRate:0,pieceRate:0,pieceUnit:"",start:dm(-200),active:true};
-const m2={id:uid(),name:"أبو مصطفى",job:"نجار",phone:"0781 333 4444",payType:"بالقطعة",salary:0,hourRate:0,pieceRate:45000,pieceUnit:"باب",start:dm(-120),active:true};
+const w1={id:uid(),name:"باب خشب",unit:"باب",rate:45000};
+const w2={id:uid(),name:"شباك",unit:"شباك",rate:30000};
+const w3={id:uid(),name:"قاطع جبس",unit:"متر",rate:12000};
+const m2={id:uid(),name:"أبو مصطفى",job:"نجار",phone:"0781 333 4444",payType:"بالقطعة",salary:0,hourRate:0,pieceRate:45000,pieceUnit:"باب",start:dm(-120),active:true,works:[w1,w2,w3]};
 const m3={id:uid(),name:"سارة عبد الله",job:"رسامة",phone:"",payType:"بالساعة",salary:0,hourRate:12000,pieceRate:0,pieceUnit:"",start:dm(-60),active:true};
 d.team=[m1,m2,m3];
 d.logs=[
@@ -2279,8 +2546,10 @@ d.logs=[
 {id:uid(),projectId:p3.id,memberId:m3.id,date:dm(-1),hours:4,worker:"",desc:"تفاصيل الواجهة"}
 ];
 d.pieces=[
-{id:uid(),memberId:m2.id,projectId:p2.id,date:dm(-10),qty:6,unit:"باب",rate:45000,note:"أبواب الصالة"},
-{id:uid(),memberId:m2.id,projectId:p1.id,date:dm(-28),qty:4,unit:"باب",rate:45000,note:"أبواب الإدارة"}
+{id:uid(),memberId:m2.id,projectId:p2.id,workId:w1.id,date:dm(-10),qty:6,unit:"باب",rate:45000,note:"أبواب الصالة"},
+{id:uid(),memberId:m2.id,projectId:p1.id,workId:w1.id,date:dm(-28),qty:4,unit:"باب",rate:45000,note:"أبواب الإدارة"},
+{id:uid(),memberId:m2.id,projectId:p2.id,workId:w3.id,date:dm(-8),qty:18,unit:"متر",rate:12000,note:"قواطع الصالة"},
+{id:uid(),memberId:m2.id,projectId:p1.id,workId:w2.id,date:dm(-24),qty:3,unit:"شباك",rate:30000,note:"شبابيك الواجهة"}
 ];
 const mo=thisMonth();
 d.payroll=[
