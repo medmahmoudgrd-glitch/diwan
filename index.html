@@ -301,6 +301,7 @@ body{background:#fff}
 <div class="toast" id="toast"></div>
 <div class="tip" id="tip"></div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.58.0/dist/umd/supabase.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 <script>
 (function(){
 "use strict";
@@ -391,6 +392,38 @@ if(paid>=amt&&amt>0)return{k:"مسددة",cls:"p-ok",paid,rem:0};
 const late=inv.due&&inv.due<today();
 if(paid>0)return{k:late?"متأخرة — جزئياً":"مسددة جزئياً",cls:late?"p-dg":"p-warn",paid,rem:amt-paid};
 return{k:late?"متأخرة":"غير مسددة",cls:late?"p-dg":"p-mut",paid,rem:amt-paid};
+}
+function waPhone(phone){
+let d=String(phone||"").replace(/[^\d]/g,"");
+if(!d)return"";
+if(d.startsWith("00"))d=d.slice(2);
+if(d.startsWith("0"))d="964"+d.slice(1);
+return d;
+}
+function waSend(phone,text){
+const p=waPhone(phone);
+if(!p){toast("لا يوجد رقم هاتف مسجّل لهذا العميل");return;}
+window.open("https://wa.me/"+p+"?text="+encodeURIComponent(text),"_blank");
+}
+function invoiceWaMessage(inv){
+const st=invStatus(inv),c=byId(DB.clients,inv.clientId)||{};
+const company=DB.settings.company||(TENANT&&TENANT.name)||"";
+let t="مرحباً "+(c.name||"")+"،\n";
+t+="تذكير بخصوص الفاتورة رقم "+(inv.no||"—")+" بتاريخ "+fdate(inv.date)+".\n";
+t+="المبلغ الإجمالي: "+money(inv.amount)+"\n";
+if(st.paid>0)t+="المسدد: "+money(st.paid)+"\n";
+t+="المتبقي: "+money(st.rem)+"\n";
+t+="تاريخ الاستحقاق: "+fdate(inv.due)+"\n\n";
+t+="مع تحيات "+company;
+return t;
+}
+function invoiceWaBtn(inv){
+const c=byId(DB.clients,inv.clientId);
+const foot=$("#mFoot");if(!foot)return;
+const b=document.createElement("button");
+b.className="btn";b.textContent="إرسال عبر واتساب";
+b.onclick=()=>waSend(c&&c.phone,invoiceWaMessage(inv));
+foot.insertBefore(b,foot.firstChild);
 }
 /* --- المصروفات --- */
 const EXP_CATS=["مواد وشراء","أجور نقل","وقود","إيجار","اتصالات وإنترنت","صيانة","أدوات ومعدات","رسوم حكومية","ضيافة","دعاية وتسويق","مصاريف بنكية","أخرى"];
@@ -550,8 +583,23 @@ return "<div class='d-head'><div class='d-brand'>"+(logo?"<img class='d-logo' sr
 }
 function showDoc(html,name){
 openModal(name,"<div class='print-wrap'><div id='doc' style='--dc:"+((TENANT&&TENANT.color)||"#0E6B5C")+"'>"+html+"</div></div>",
-"<button class='btn p' id='prt'>طباعة / حفظ PDF</button><button class='btn' data-close='1'>إغلاق</button>");
+"<button class='btn p' id='pdf'>تنزيل PDF</button><button class='btn' id='prt'>طباعة</button><button class='btn' data-close='1'>إغلاق</button>");
 $("#prt").onclick=()=>{try{window.print();}catch(e){toast("استخدم Ctrl+P للطباعة");}};
+const pdfBtn=$("#pdf");
+if(window.html2pdf){
+pdfBtn.onclick=async()=>{
+const old=pdfBtn.textContent;pdfBtn.disabled=true;pdfBtn.textContent="جارٍ التجهيز…";
+try{
+if(document.fonts&&document.fonts.ready)await document.fonts.ready;
+const fname=String(name||"مستند").replace(/[\\/:*?"<>|]/g,"-")+".pdf";
+await html2pdf().set({margin:8,filename:fname,
+image:{type:"jpeg",quality:0.98},
+html2canvas:{scale:2,useCORS:true},
+jsPDF:{unit:"mm",format:"a4",orientation:"portrait"}}).from($("#doc")).save();
+}catch(e){toast("تعذّر إنشاء PDF — جرّب زر الطباعة");}
+pdfBtn.disabled=false;pdfBtn.textContent=old;
+};
+}else{pdfBtn.hidden=true;}
 }
 function invoiceDoc(inv){
 const st=invStatus(inv),pays=DB.payments.filter(p=>p.invoiceId===inv.id).sort((a,b)=>a.date<b.date?-1:1);
@@ -566,6 +614,7 @@ h+="<div class='tot'><table><tr><td>إجمالي الفاتورة</td><td class=
 "<tr><td class='big'>المتبقي</td><td class='n big' style='text-align:end'>"+money(st.rem)+"</td></tr></table></div>";
 h+="<div class='sign'><div>توقيع المستلم</div><div>ختم وتوقيع "+esc(DB.settings.company||(TENANT&&TENANT.name)||"")+"</div></div>";
 showDoc(h,"فاتورة "+inv.no);
+invoiceWaBtn(inv);
 }
 function receiptDoc(p){
 const inv=byId(DB.invoices,p.invoiceId)||{};
@@ -1222,7 +1271,7 @@ rows.map(i=>{const s=invStatus(i);
 return "<tr><td><b>"+esc(i.no)+"</b></td><td>"+esc(clientName(i.clientId))+"<div class='t2'>"+esc(projectTitle(i.projectId))+"</div></td>"+
 "<td class='n'>"+fdate(i.date)+"</td><td class='n'>"+fdate(i.due)+"</td><td class='n'>"+money(i.amount)+"</td><td class='n'>"+money(s.paid)+"</td>"+
 "<td class='n'>"+money(s.rem)+"</td><td><span class='pill "+s.cls+"'>"+s.k+"</span></td>"+
-"<td><div class='rowact'>"+act("invoice-print",i.id,"طباعة")+(canEdit()&&s.rem>0?act("pay-for",i.id,"دفعة"):"")+
+"<td><div class='rowact'>"+act("invoice-print",i.id,"طباعة")+act("invoice-wa",i.id,"واتساب")+(canEdit()&&s.rem>0?act("pay-for",i.id,"دفعة"):"")+
 (canEdit()?act("invoice-edit",i.id,"تعديل","gh"):"")+(canAdmin()?act("invoice-del",i.id,"حذف","gh dg"):"")+"</div></td></tr>";}).join("")+"</tbody></table></div>"
 :"<div class='empty'><b>لا توجد فواتير</b>أنشئ فاتورة لمشروع لتتابع تسديدها.</div>";
 return h+"</div>";
@@ -2321,6 +2370,7 @@ save();state.month=m;render();toast(n?("تم احتساب "+n+" راتب لشه�
 /* invoices & payments */
 "invoice-new":()=>invoiceForm(null),"invoice-edit":()=>invoiceForm(byId(DB.invoices,id)),
 "invoice-print":()=>invoiceDoc(byId(DB.invoices,id)),
+"invoice-wa":()=>{const i=byId(DB.invoices,id);if(!i)return;const c=byId(DB.clients,i.clientId);waSend(c&&c.phone,invoiceWaMessage(i));},
 "invoice-del":()=>askConfirm("سيتم حذف الفاتورة مع دفعاتها. متابعة؟",()=>{
 DB.payments=DB.payments.filter(p=>p.invoiceId!==id);DB.invoices=DB.invoices.filter(i=>i.id!==id);save();render();toast("تم الحذف");}),
 "payment-new":()=>paymentForm(null),"payment-edit":()=>paymentForm(byId(DB.payments,id)),
