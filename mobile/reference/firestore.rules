@@ -1,0 +1,78 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function ownerDoc() { return /databases/$(database)/documents/control/owner; }
+    function isOwner() {
+      return request.auth != null && exists(ownerDoc()) && get(ownerDoc()).data.uid == request.auth.uid;
+    }
+
+    // The first account that signs in claims the panel. It can never be changed from the website.
+    match /control/owner {
+      allow read: if request.auth != null && resource.data.uid == request.auth.uid;
+      allow create: if request.auth != null && request.resource.data.uid == request.auth.uid && !exists(ownerDoc());
+    }
+
+    match /{coll}/{id} {
+      allow read, write: if isOwner() && coll in ['companies', 'plans', 'payments', 'reports', 'secret', 'meta'];
+    }
+
+    // Employee attendance relay (Grdlabs 1.9.0+). Each company's desktop app owns att/{cid} through its
+    // anonymous identity; employees' phones become members by claiming a one-time pairing code.
+    match /att/{cid} {
+      function sub(coll, id) { return /databases/$(database)/documents/att/$(cid)/$(coll)/$(id); }
+      function company() { return get(/databases/$(database)/documents/att/$(cid)).data; }
+      function owner() { return request.auth != null && company().owner == request.auth.uid; }
+      function member() { return request.auth != null && exists(sub('members', request.auth.uid)); }
+      function me() { return get(sub('members', request.auth.uid)).data; }
+
+      allow read: if request.auth != null && (resource.data.owner == request.auth.uid || member());
+      allow create: if request.auth != null && request.resource.data.owner == request.auth.uid;
+      allow update: if request.auth != null && resource.data.owner == request.auth.uid && request.resource.data.owner == resource.data.owner;
+      allow delete: if request.auth != null && resource.data.owner == request.auth.uid;
+
+      // The code itself is the secret: anyone signed in may fetch one by name, never list them.
+      match /pairs/{code} {
+        allow get: if request.auth != null;
+        allow list, create, delete: if owner();
+        allow update: if owner() || (request.auth != null
+          && resource.data.used == false && resource.data.exp > request.time
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['used', 'usedBy'])
+          && request.resource.data.used == true && request.resource.data.usedBy == request.auth.uid
+          && getAfter(sub('members', request.auth.uid)).data.code == code);
+      }
+
+      match /members/{uid} {
+        allow get: if request.auth != null && (request.auth.uid == uid || owner());
+        allow list, delete: if owner();
+        allow create: if request.auth != null && request.auth.uid == uid
+          && request.resource.data.keys().hasOnly(['employeeId', 'code', 'at', 'label'])
+          && request.resource.data.at == request.time
+          && get(sub('pairs', request.resource.data.code)).data.used == false
+          && get(sub('pairs', request.resource.data.code)).data.exp > request.time
+          && get(sub('pairs', request.resource.data.code)).data.employeeId == request.resource.data.employeeId
+          && getAfter(sub('pairs', request.resource.data.code)).data.usedBy == uid;
+      }
+
+      // Each employee reads only their own pay summary.
+      match /staff/{employeeId} {
+        allow get: if owner() || (member() && me().employeeId == employeeId);
+        allow list, write: if owner();
+      }
+
+      // Clock events: written by a paired phone at the company's NFC tag, inside the radius, stamped with server time.
+      match /events/{eventId} {
+        allow get, list, delete: if owner();
+        allow create: if member()
+          && request.resource.data.keys().hasOnly(['employeeId', 'kind', 'at', 'lat', 'lng', 'acc', 'dist', 'tag', 'uid'])
+          && request.resource.data.employeeId == me().employeeId
+          && request.resource.data.uid == request.auth.uid
+          && request.resource.data.kind in ['in', 'out']
+          && request.resource.data.at == request.time
+          && request.resource.data.lat is number && request.resource.data.lng is number
+          && request.resource.data.acc is number && request.resource.data.dist is number
+          && request.resource.data.dist <= company().radius
+          && request.resource.data.tag == company().tag;
+      }
+    }
+  }
+}
