@@ -368,10 +368,7 @@ patch("  function doPrint() {\n    const d = docData();", `  // A self-contained
     + '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+Arabic:wght@400;500;600;700;800&display=swap">'
     + '<style>' + [...document.querySelectorAll('style')].map((s) => s.textContent).join('\\n') + '</style>'
     + '<style>@page{size:794px 1123px;margin:0}html,body{margin:0;padding:0;height:auto;min-height:0;overflow:hidden;background:#fff;display:block;direction:ltr}body>.doc{direction:rtl;margin:0;width:794px;height:1123px;min-height:1123px;overflow:hidden}.doc .iv{min-height:1093px}</style>'
-    // The phone's print renderer lays the page out at its own width (not 794), then shrinks it onto the sheet;
-    // zooming the document to that width makes it fill the A4 page exactly, edge to edge.
-    + '<script>function fit(){var w=document.documentElement.clientWidth||window.innerWidth||794;document.body.style.zoom=String(w/794);}fit();addEventListener("resize",fit);addEventListener("load",fit);</script>'
-    + '</head><body>' + docEl(d) + '<script>fit()</script></body></html>';
+    + '</head><body>' + docEl(d) + '</body></html>';
   function doPrint() {
     const d = docData();
     if (RN) return post({ type: 'pdf', mode: 'print', file: d.file, html: docPage(d) });`);
